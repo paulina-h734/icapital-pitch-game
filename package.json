@@ -1,0 +1,21 @@
+{
+  "name": "icapital-drive-the-journey",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Drive the Journey — a playable pitch game for iCapital.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
+  }
+}
