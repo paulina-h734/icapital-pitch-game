@@ -1,26 +1,28 @@
 import Phaser from 'phaser';
 import { TILE_SIZE, MOVE_MS, RENDER_SCALE } from '../config.js';
-import { makePlaceholderTextures } from '../gfx/placeholders.js';
 import {
-  buildLevel,
-  isBlocked,
-  TILES,
-  POIS,
-  MAP_W,
-  MAP_H,
-  START,
-} from '../map/level1.js';
+  makePlaceholderTextures,
+  TILESET_KEY,
+  TILE_INDEX,
+} from '../gfx/placeholders.js';
+import { isBlocked, TILES, MAP_W, MAP_H } from '../map/level1.js';
+import { loadMap, saveMap } from '../map/mapStore.js';
+import MapEditor from '../editor/MapEditor.js';
 
 // ---------------------------------------------------------------------------
 // GameScene — open-world roaming: free 4-directional grid movement with hard
 // corners, a tight centered camera (the zoom is what obscures the map), and
-// green tree/bush boundaries. No fog. Press M for a debug full-map overview.
-// Tasks / KYC / forest layer on in later steps.
+// green tree/bush boundaries. No fog.
+//   M = debug full-map overview.   ` (backtick) = in-game map editor.
+// The map is loaded from mapStore (edited copy in localStorage, else default)
+// and rendered through a culling tilemap layer so it scales to any size.
 // ---------------------------------------------------------------------------
 
-const FOLIAGE_KEY = {
-  [TILES.TREE]: 'tile-tree',
-  [TILES.BUSH]: 'tile-bush',
+const POI_COLORS = {
+  alt: 0xf0932b, // research & diligence
+  kyc: 0x2d6cdf, // KYC customs
+  finish: 0xe24b4a,
+  start: 0x2ecc71,
 };
 
 export default class GameScene extends Phaser.Scene {
@@ -30,7 +32,11 @@ export default class GameScene extends Phaser.Scene {
 
   create() {
     makePlaceholderTextures(this);
-    this.tiles = buildLevel();
+
+    const map = loadMap();
+    this.tiles = map.tiles;
+    this.pois = map.pois;
+
     this.drawMap();
     this.drawPois();
     this.createDriver();
@@ -40,83 +46,117 @@ export default class GameScene extends Phaser.Scene {
     this.moving = false;
     this.facing = 'up';
     this.overview = false;
+    this.editing = false;
+
+    this.editor = new MapEditor(this);
+    this.events.once('shutdown', () => this.editor.destroy());
   }
 
-  // Stamp every tile once into a single background RenderTexture (cheap: no
-  // per-tile game objects). Ground uses a subtle checker so motion reads.
+  // Render the map through a culling tilemap layer: only on-screen tiles are
+  // drawn, so the world scales to any size without a giant texture.
   drawMap() {
-    const rt = this.add.renderTexture(0, 0, MAP_W * TILE_SIZE, MAP_H * TILE_SIZE);
-    rt.setOrigin(0, 0);
-    rt.setDepth(0);
-    for (let y = 0; y < MAP_H; y++) {
-      for (let x = 0; x < MAP_W; x++) {
-        const tile = this.tiles[y][x];
-        let key;
-        if (tile === TILES.GROUND) {
-          key = (x + y) % 2 === 0 ? 'tile-ground' : 'tile-ground-alt';
-        } else {
-          key = FOLIAGE_KEY[tile];
-        }
-        rt.draw(key, x * TILE_SIZE, y * TILE_SIZE);
-      }
-    }
-    this.mapRT = rt;
+    const indexGrid = this.tiles.map((row, y) =>
+      row.map((tile, x) => this.tileIndex(x, y, tile)),
+    );
+    this.map = this.make.tilemap({
+      data: indexGrid,
+      tileWidth: TILE_SIZE,
+      tileHeight: TILE_SIZE,
+    });
+    const tileset = this.map.addTilesetImage(TILESET_KEY, TILESET_KEY, TILE_SIZE, TILE_SIZE);
+    this.layer = this.map.createLayer(0, tileset, 0, 0).setDepth(0);
   }
 
-  // Placeholder markers for each point of interest, so the route reads and
-  // matches the sketch. Step 2 replaces these with the real task/gate objects.
+  // Tile type + position -> tileset index (ground checkers by parity).
+  tileIndex(x, y, tile) {
+    if (tile === TILES.GROUND) {
+      return (x + y) % 2 === 0 ? TILE_INDEX.GROUND : TILE_INDEX.GROUND_ALT;
+    }
+    return tile === TILES.TREE ? TILE_INDEX.TREE : TILE_INDEX.BUSH;
+  }
+
+  // Live edit: change one tile in both the data grid and the rendered layer.
+  paintTile(x, y, value) {
+    if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return false;
+    if (this.tiles[y][x] === value) return false;
+    this.tiles[y][x] = value;
+    this.map.putTileAt(this.tileIndex(x, y, value), x, y, false, this.layer);
+    return true;
+  }
+
+  // Placeholder markers for each point of interest. Labels only show in the
+  // editor; in play the markers stand in for the future task/gate objects.
   drawPois() {
-    const ORANGE = 0xf0932b; // alts (research & diligence)
-    const BLUE = 0x2d6cdf; // KYC customs
-    const RED = 0xe24b4a; // finish
+    this.poiObjects = {};
+    this.pois.forEach((p) => this.createPoi(p));
+  }
+
+  createPoi(p) {
+    const { px, py } = this.tileToWorld(p.x, p.y);
     const s = TILE_SIZE * 0.4;
+    let marker;
+    switch (p.type) {
+      case 'alt-debris': // ◇ diamond
+        marker = this.add.rectangle(px, py, s * 1.4, s * 1.4, POI_COLORS.alt).setAngle(45);
+        break;
+      case 'alt-disguise': // ○ circle
+        marker = this.add.circle(px, py, s, POI_COLORS.alt);
+        break;
+      case 'alt-caged': // △ triangle
+        marker = this.add.triangle(px, py, 0, s, s, -s, -s, -s, POI_COLORS.alt);
+        break;
+      case 'kyc1':
+      case 'kyc2':
+        marker = this.add.rectangle(px, py, TILE_SIZE * 0.9, TILE_SIZE * 0.6, POI_COLORS.kyc);
+        break;
+      case 'finish':
+        marker = this.add.rectangle(px, py, TILE_SIZE * 0.7, TILE_SIZE * 0.7, POI_COLORS.finish);
+        break;
+      case 'start':
+      default:
+        marker = this.add.rectangle(px, py, TILE_SIZE * 0.6, TILE_SIZE * 0.6, POI_COLORS.start);
+        break;
+    }
+    marker.setStrokeStyle(2, 0x1a1a1a).setDepth(5);
 
-    POIS.forEach((p) => {
-      const { px, py } = this.tileToWorld(p.x, p.y);
-      let marker;
-      switch (p.type) {
-        case 'alt-debris': // ◇ diamond
-          marker = this.add.rectangle(px, py, s * 1.4, s * 1.4, ORANGE).setAngle(45);
-          break;
-        case 'alt-disguise': // ○ circle
-          marker = this.add.circle(px, py, s, ORANGE);
-          break;
-        case 'alt-caged': // △ triangle
-          marker = this.add.triangle(px, py, 0, s, s, -s, -s, -s, ORANGE);
-          break;
-        case 'kyc1':
-        case 'kyc2': // KYC gate
-          marker = this.add.rectangle(px, py, TILE_SIZE * 0.9, TILE_SIZE * 0.6, BLUE);
-          break;
-        case 'finish': // finish flag
-          marker = this.add.rectangle(px, py, TILE_SIZE * 0.7, TILE_SIZE * 0.7, RED);
-          break;
-        case 'start':
-        default:
-          marker = null; // the car spawns here; no marker needed
-          break;
-      }
-      if (marker) marker.setStrokeStyle(2, 0x1a1a1a).setDepth(5);
+    const label = this.add
+      .text(px, py - TILE_SIZE * 0.75, p.label, {
+        fontFamily: 'sans-serif',
+        fontSize: '11px',
+        color: '#ffffff',
+        backgroundColor: '#00000088',
+        padding: { x: 3, y: 1 },
+      })
+      .setOrigin(0.5, 1)
+      .setResolution(RENDER_SCALE)
+      .setDepth(6)
+      .setVisible(false);
 
-      this.add
-        .text(px, py - TILE_SIZE * 0.75, p.label, {
-          fontFamily: 'sans-serif',
-          fontSize: '11px',
-          color: '#ffffff',
-          backgroundColor: '#00000088',
-          padding: { x: 3, y: 1 },
-        })
-        .setOrigin(0.5, 1)
-        .setResolution(RENDER_SCALE)
-        .setDepth(6);
-    });
+    this.poiObjects[p.type] = { marker, label };
+  }
+
+  // Editor: move a POI to a new tile (updates data + marker + label).
+  movePoi(type, x, y) {
+    const poi = this.pois.find((p) => p.type === type);
+    if (!poi) return;
+    poi.x = x;
+    poi.y = y;
+    const { px, py } = this.tileToWorld(x, y);
+    const obj = this.poiObjects[type];
+    obj.marker.setPosition(px, py);
+    obj.label.setPosition(px, py - TILE_SIZE * 0.75);
   }
 
   createDriver() {
-    this.grid = { x: START.x, y: START.y };
+    const start = this.startPoi();
+    this.grid = { x: start.x, y: start.y };
     const { px, py } = this.tileToWorld(this.grid.x, this.grid.y);
     this.driver = this.add.image(px, py, 'car-old');
     this.driver.setDepth(10);
+  }
+
+  startPoi() {
+    return this.pois.find((p) => p.type === 'start') || { x: 1, y: 1 };
   }
 
   setupCamera() {
@@ -130,15 +170,49 @@ export default class GameScene extends Phaser.Scene {
 
   setupInput() {
     this.cursors = this.input.keyboard.createCursorKeys();
-    this.keys = this.input.keyboard.addKeys('W,A,S,D,M');
-    // Stop arrow keys / WASD from scrolling the host page.
-    this.input.keyboard.addCapture('UP,DOWN,LEFT,RIGHT,W,A,S,D,M');
-    this.keys.M.on('down', () => this.toggleOverview());
+    this.keys = this.input.keyboard.addKeys('W,A,S,D,M,BACKTICK');
+    // Stop these keys from scrolling the host page.
+    this.input.keyboard.addCapture('UP,DOWN,LEFT,RIGHT,W,A,S,D,M,BACKTICK');
+    this.keys.M.on('down', () => {
+      if (!this.editing) this.toggleOverview();
+    });
+    this.keys.BACKTICK.on('down', () => this.editor.toggle());
   }
 
   update() {
+    if (this.editing) {
+      this.editor.update();
+      return;
+    }
     if (!this.overview) this.handleMovement();
   }
+
+  // --- editor hooks ----------------------------------------------------------
+
+  setEditing(on) {
+    this.editing = on;
+    this.driver.setVisible(!on);
+    Object.values(this.poiObjects).forEach((o) => o.label.setVisible(on));
+  }
+
+  respawnDriverAtStart() {
+    this.tweens.killTweensOf(this.driver);
+    const start = this.startPoi();
+    this.grid = { x: start.x, y: start.y };
+    const { px, py } = this.tileToWorld(start.x, start.y);
+    this.driver.setPosition(px, py);
+    this.moving = false;
+  }
+
+  getMapData() {
+    return { tiles: this.tiles, pois: this.pois };
+  }
+
+  persist() {
+    saveMap(this.getMapData());
+  }
+
+  // ---------------------------------------------------------------------------
 
   handleMovement() {
     if (this.moving) return;
