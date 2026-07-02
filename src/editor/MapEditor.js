@@ -63,7 +63,6 @@ export default class MapEditor {
     this.scene.setEditing(true);
 
     const cam = this.scene.cameras.main;
-    cam.stopFollow();
     cam.setZoom(EDIT_ZOOM);
     const start = this.scene.startPoi();
     const { px, py } = this.scene.tileToWorld(start.x, start.y);
@@ -93,9 +92,10 @@ export default class MapEditor {
     this.scene.respawnDriverAtStart();
     this.scene.setEditing(false);
 
+    // Hand the camera back to the scene's corridor-aware follow.
     const cam = this.scene.cameras.main;
     cam.setZoom(RENDER_SCALE);
-    cam.startFollow(this.scene.driver, true, 0.15, 0.15);
+    this.scene.centerCameraOn(this.scene.driver.x, this.scene.driver.y);
 
     this.hud.style.display = 'none';
   }

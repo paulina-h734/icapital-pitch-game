@@ -20,7 +20,9 @@ import {
 // compact in localStorage.
 // ---------------------------------------------------------------------------
 
-const KEY = 'drive.level1.map.v1';
+// Bump this when the committed map's dimensions change so stale browser saves
+// from earlier iterations are discarded rather than loaded.
+const KEY = 'drive.level1.map.v2';
 
 export { TILES, MAP_W, MAP_H };
 
@@ -47,8 +49,18 @@ function isValid(data) {
     data.h === MAP_H &&
     Array.isArray(data.tiles) &&
     data.tiles.length === MAP_H &&
+    data.tiles.every((row) => typeof row === 'string' && row.length === MAP_W) &&
     Array.isArray(data.pois)
   );
+}
+
+// Guard against a corrupt/mismatched save stranding the car: the start must
+// exist and sit on walkable ground.
+function startIsOnGround(tiles, pois) {
+  const start = pois.find((p) => p.type === 'start');
+  if (!start) return false;
+  const row = tiles[start.y];
+  return !!row && row[start.x] === TILES.GROUND;
 }
 
 // Returns { w, h, tiles: number[][], pois: [{type,x,y,label}] }.
@@ -58,12 +70,11 @@ export function loadMap() {
     if (raw) {
       const data = JSON.parse(raw);
       if (isValid(data)) {
-        return {
-          w: data.w,
-          h: data.h,
-          tiles: decodeRows(data.tiles),
-          pois: clonePois(data.pois),
-        };
+        const tiles = decodeRows(data.tiles);
+        const pois = clonePois(data.pois);
+        if (startIsOnGround(tiles, pois)) {
+          return { w: data.w, h: data.h, tiles, pois };
+        }
       }
     }
   } catch (e) {

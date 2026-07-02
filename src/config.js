@@ -17,10 +17,20 @@ export const VIEW_TILES_Y = 9;
 // The final look sharpens further once real high-res art replaces placeholders.
 export const RENDER_SCALE = 3;
 
-// Movement: one grid cell per step, tween-driven so turns land on hard corners
-// (no rounded turns, no sub-tile drift). Free 4-directional roaming within the
-// open walkable space.
-export const MOVE_MS = 130; // ms to cross one tile in the old car (base speed)
+// Movement: continuous, physics-driven (velocity + slide-along-walls), 8-way.
+// The car is no longer snapped to the tile grid.
+export const CAR_SPEED = 210; // px/s for the old car (base speed)
+
+// Camera deadzone (Stardew-style): the car roams freely inside this centered
+// box before the view scrolls. Full box size in tiles. The camera is also
+// "corridor-aware": on a vertical stretch of path it locks its X to the path
+// centreline (and vice versa), so wiggling across a corridor doesn't scroll the
+// cross-axis. CORRIDOR_RATIO is how much longer one axis of open space must be
+// than the other to count as a corridor.
+export const DEADZONE_TILES_X = 2.5;
+export const DEADZONE_TILES_Y = 2;
+export const CORRIDOR_RATIO = 1.4;
+export const CORRIDOR_SCAN_CAP = 12; // tiles scanned each way when measuring spans
 
 // Placeholder palette. Walkable GROUND reads light/warm; TREE & BUSH are the
 // darker green impassable boundaries. Real Kenney art swaps in later.
