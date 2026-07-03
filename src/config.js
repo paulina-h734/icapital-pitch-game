@@ -21,16 +21,22 @@ export const RENDER_SCALE = 3;
 // The car is no longer snapped to the tile grid.
 export const CAR_SPEED = 210; // px/s for the old car (base speed)
 
-// Camera deadzone (Stardew-style): the car roams freely inside this centered
-// box before the view scrolls. Full box size in tiles. The camera is also
-// "corridor-aware": on a vertical stretch of path it locks its X to the path
-// centreline (and vice versa), so wiggling across a corridor doesn't scroll the
-// cross-axis. CORRIDOR_RATIO is how much longer one axis of open space must be
-// than the other to count as a corridor.
-export const DEADZONE_TILES_X = 2.5;
-export const DEADZONE_TILES_Y = 2;
-export const CORRIDOR_RATIO = 1.4;
-export const CORRIDOR_SCAN_CAP = 12; // tiles scanned each way when measuring spans
+// Camera (Stardew-style follow). It follows the CAR directly, with per-axis
+// smoothing: responsive along the direction of travel (so the car never reaches
+// the screen edge) and heavily damped across a corridor (so side-to-side wiggle
+// doesn't scroll and it never chases a side street). Which axis is "cross" is
+// decided continuously by the corridor shape (below), so it blends at bends.
+export const CAM_TRAVEL_SMOOTH = 0.18; // responsive follow along travel
+export const CAM_CROSS_SMOOTH = 0.045; // calm follow across a corridor
+
+// Corridor bias: on a straight-ish stretch of path the camera pulls its
+// cross-axis toward the path centreline, so wiggling across a lane doesn't
+// scroll it. The bias ramps in CONTINUOUSLY with how elongated the open space
+// is (full at CORRIDOR_RATIO), and fades to zero where the path opens up at a
+// junction — so there's no hard snapping at bends. Combined with CAM_SMOOTH the
+// whole thing glides.
+export const CORRIDOR_RATIO = 1.6; // open-space length ratio for full bias
+export const CORRIDOR_SCAN_CAP = 14; // tiles scanned each way when measuring spans
 
 // Placeholder palette. Walkable GROUND reads light/warm; TREE & BUSH are the
 // darker green impassable boundaries. Real Kenney art swaps in later.

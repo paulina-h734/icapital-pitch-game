@@ -3,8 +3,8 @@ import {
   TILE_SIZE,
   RENDER_SCALE,
   CAR_SPEED,
-  DEADZONE_TILES_X,
-  DEADZONE_TILES_Y,
+  CAM_TRAVEL_SMOOTH,
+  CAM_CROSS_SMOOTH,
   CORRIDOR_RATIO,
   CORRIDOR_SCAN_CAP,
 } from '../config.js';
@@ -210,11 +210,12 @@ export default class GameScene extends Phaser.Scene {
     this.cameras.main.centerOn(cx, cy);
   }
 
-  // Corridor-aware follow: keep the car near the centre of the view, but on a
-  // vertical stretch of path lock the camera's X to the path centreline (and
-  // vice versa on a horizontal stretch), so moving across a corridor doesn't
-  // scroll the cross-axis. Small movement along the corridor stays inside a
-  // deadzone before the view scrolls.
+  // Follow the car directly with per-axis smoothing. We measure how corridor-
+  // like the spot is: on a vertical stretch the X (cross) axis is damped so
+  // side-to-side wiggle doesn't scroll and side streets aren't chased, while Y
+  // (travel) stays responsive — and vice versa. The cross/travel split blends
+  // continuously via the weights, so bends and junctions glide. In the open,
+  // both axes are responsive.
   updateCamera() {
     const cam = this.cameras.main;
     const car = this.driver;
@@ -226,37 +227,21 @@ export default class GameScene extends Phaser.Scene {
     const hSpan = l + r + 1;
     const vSpan = u + d + 1;
 
-    let targetX = car.x;
-    let targetY = car.y;
-    let lockX = false;
-    let lockY = false;
-    if (vSpan > hSpan * CORRIDOR_RATIO) {
-      targetX = (cx - l + (cx + r + 1)) * 0.5 * TILE_SIZE; // horizontal centreline
-      lockX = true;
-    } else if (hSpan > vSpan * CORRIDOR_RATIO) {
-      targetY = (cy - u + (cy + d + 1)) * 0.5 * TILE_SIZE; // vertical centreline
-      lockY = true;
-    }
+    // Continuous "is this a corridor along that axis" weights (0..1).
+    const ramp = CORRIDOR_RATIO - 1;
+    const vWeight = Phaser.Math.Clamp((vSpan / hSpan - 1) / ramp, 0, 1); // vertical -> X cross
+    const hWeight = Phaser.Math.Clamp((hSpan / vSpan - 1) / ramp, 0, 1); // horizontal -> Y cross
 
-    const curX = cam.midPoint.x;
-    const curY = cam.midPoint.y;
-    // Locked (cross) axis snaps to the centreline with no deadzone; the free
-    // axis keeps a deadzone so small along-corridor moves don't scroll.
-    const dzX = lockX ? 0 : (DEADZONE_TILES_X * TILE_SIZE) / 2;
-    const dzY = lockY ? 0 : (DEADZONE_TILES_Y * TILE_SIZE) / 2;
-    const nextX = curX + this.axisStep(targetX - curX, dzX);
-    const nextY = curY + this.axisStep(targetY - curY, dzY);
+    // Blend the smoothing per axis: damped where it's the cross axis of a
+    // corridor, responsive otherwise.
+    const spread = CAM_CROSS_SMOOTH - CAM_TRAVEL_SMOOTH;
+    const smoothX = CAM_TRAVEL_SMOOTH + spread * vWeight;
+    const smoothY = CAM_TRAVEL_SMOOTH + spread * hWeight;
+
+    const nextX = cam.midPoint.x + (car.x - cam.midPoint.x) * smoothX;
+    const nextY = cam.midPoint.y + (car.y - cam.midPoint.y) * smoothY;
     const [clampedX, clampedY] = this.clampCenter(nextX, nextY);
     cam.centerOn(clampedX, clampedY);
-  }
-
-  // How far to move the camera centre this frame along one axis: nothing inside
-  // the deadzone, otherwise a smoothed step toward the target.
-  axisStep(delta, deadHalf) {
-    let d = delta;
-    if (Math.abs(d) <= deadHalf) return 0;
-    d -= Math.sign(d) * deadHalf;
-    return d * 0.16; // smoothing
   }
 
   // Count contiguous walkable tiles from (cx,cy) in +/- (dirX,dirY), capped.
