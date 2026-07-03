@@ -16,6 +16,18 @@ import {
 import { TILES, MAP_W, MAP_H } from '../map/level1.js';
 import { loadMap, saveMap } from '../map/mapStore.js';
 import MapEditor from '../editor/MapEditor.js';
+import { runCagedAltTask } from '../tasks/cagedAlt.js';
+import { runDebrisAltTask } from '../tasks/debrisAlt.js';
+import { runDisguiseAltTask } from '../tasks/disguiseAlt.js';
+
+// Proximity (in tiles) at which driving into an alt triggers its task.
+const TRIGGER_RADIUS = 1.3;
+// Alt POI type -> its collection task. All 3 must be collected before KYC 1.
+const ALT_TASKS = {
+  'alt-caged': runCagedAltTask,
+  'alt-debris': runDebrisAltTask,
+  'alt-disguise': runDisguiseAltTask,
+};
 
 // ---------------------------------------------------------------------------
 // GameScene — open-world roaming: continuous 8-directional driving (physics
@@ -56,6 +68,16 @@ export default class GameScene extends Phaser.Scene {
     this.facing = 'up';
     this.overview = false;
     this.editing = false;
+
+    // Task / collection state. isICap flips to true on an iCapCar run (step 3);
+    // OLD car for now.
+    this.isICap = false;
+    this.interacting = false;
+    this.collected = new Set();
+    this.inventory = [];
+
+    // Parallel HUD/prompt scene (crisp screen-space UI at zoom 1).
+    if (!this.scene.isActive('UI')) this.scene.launch('UI');
 
     // Debug map editor — dev-only so it never ships in the pitch build.
     if (DEV) {
@@ -135,6 +157,15 @@ export default class GameScene extends Phaser.Scene {
     }
     marker.setStrokeStyle(2, 0x1a1a1a).setDepth(5);
 
+    // The disguise alt wears its disguise on the map: a little hat + moustache
+    // that fade away once the asset has been inspected & collected.
+    const parts = [];
+    if (p.type === 'alt-disguise') {
+      const hat = this.add.rectangle(px, py - s * 0.7, s * 1.2, s * 0.6, 0x2b3346).setDepth(6);
+      const moustache = this.add.rectangle(px, py + s * 0.35, s * 1.0, s * 0.35, 0x2b2320).setDepth(6);
+      parts.push(hat, moustache);
+    }
+
     const label = this.add
       .text(px, py - TILE_SIZE * 0.75, p.label, {
         fontFamily: 'sans-serif',
@@ -148,7 +179,7 @@ export default class GameScene extends Phaser.Scene {
       .setDepth(6)
       .setVisible(false);
 
-    this.poiObjects[p.type] = { marker, label };
+    this.poiObjects[p.type] = { marker, label, parts };
   }
 
   // Editor: move a POI to a new tile (updates data + marker + label).
@@ -161,6 +192,11 @@ export default class GameScene extends Phaser.Scene {
     const obj = this.poiObjects[type];
     obj.marker.setPosition(px, py);
     obj.label.setPosition(px, py - TILE_SIZE * 0.75);
+    if (obj.parts?.length) {
+      const s = TILE_SIZE * 0.4;
+      obj.parts[0].setPosition(px, py - s * 0.7);
+      obj.parts[1].setPosition(px, py + s * 0.35);
+    }
   }
 
   createDriver() {
@@ -266,9 +302,11 @@ export default class GameScene extends Phaser.Scene {
     // Debug tools are dev-only.
     if (DEV) {
       this.keys.M.on('down', () => {
-        if (!this.editing) this.toggleOverview();
+        if (!this.editing && !this.interacting) this.toggleOverview();
       });
-      this.keys.BACKTICK.on('down', () => this.editor.toggle());
+      this.keys.BACKTICK.on('down', () => {
+        if (!this.interacting) this.editor.toggle();
+      });
     }
   }
 
@@ -277,9 +315,46 @@ export default class GameScene extends Phaser.Scene {
       this.editor?.update();
       return;
     }
-    if (this.overview) return;
+    if (this.overview || this.interacting) return;
     this.handleMovement();
     this.updateCamera();
+    this.checkTriggers();
+  }
+
+  // --- collection triggers ---------------------------------------------------
+
+  // Drive into an uncollected alt to start its task. The radius deactivates once
+  // collected (it's in `this.collected`), so it never re-fires.
+  checkTriggers() {
+    for (const poi of this.pois) {
+      const task = ALT_TASKS[poi.type];
+      if (!task || this.collected.has(poi.type)) continue;
+      const { px, py } = this.tileToWorld(poi.x, poi.y);
+      const dist = Phaser.Math.Distance.Between(this.driver.x, this.driver.y, px, py);
+      if (dist < TILE_SIZE * TRIGGER_RADIUS) {
+        this.startTask(poi, task);
+        return;
+      }
+    }
+  }
+
+  startTask(poi, task) {
+    this.interacting = true;
+    this.driver.body.setVelocity(0, 0);
+    task(this, this.scene.get('UI'), { isICap: this.isICap }, () => this.finishTask(poi));
+  }
+
+  finishTask(poi) {
+    this.collected.add(poi.type);
+    this.inventory.push(poi.type);
+    this.scene.get('UI').setInventory(this.inventory.length);
+    const obj = this.poiObjects[poi.type];
+    if (obj) {
+      obj.marker.setAlpha(0.35); // spent — visibly collected
+      // Disguise: the disguise fades off the map asset once inspected.
+      (obj.parts || []).forEach((pt) => pt.setAlpha(0));
+    }
+    this.interacting = false;
   }
 
   // --- editor hooks ----------------------------------------------------------
