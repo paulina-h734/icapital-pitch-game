@@ -22,7 +22,8 @@ import { runDebrisAltTask } from '../tasks/debrisAlt.js';
 import { runDisguiseAltTask } from '../tasks/disguiseAlt.js';
 import { runKycGate } from '../tasks/kycGate.js';
 import { runOverpassButton } from '../tasks/overpassButton.js';
-import { runFinish } from '../tasks/finish.js';
+import { runAssembly } from '../tasks/assembly.js';
+import { recordBestTime } from '../bestTimes.js';
 
 // Proximity (in tiles) at which driving into an alt/button/finish triggers it.
 const TRIGGER_RADIUS = 1.3;
@@ -70,7 +71,8 @@ export default class GameScene extends Phaser.Scene {
     makePlaceholderTextures(this);
 
     const map = loadMap();
-    this.tiles = map.tiles;
+    this.tiles = map.tiles; // base terrain (ground/tree/bush)
+    this.overpass = map.overpass; // overlay (0 / CONCRETE / BRIDGE), on top of terrain
     this.pois = map.pois;
 
     this.drawMap();
@@ -90,6 +92,9 @@ export default class GameScene extends Phaser.Scene {
     this.interacting = false;
     this.collected = new Set();
     this.inventory = [];
+    // Run timer: starts when a car is chosen, stops at the end of architecting.
+    this.runStartMs = 0;
+    this.runActive = false;
 
     // Client identity for KYC — set by the opening sequence (step 5); defaults
     // keep the gate playable until then.
@@ -153,41 +158,50 @@ export default class GameScene extends Phaser.Scene {
     return TILE_INDEX.BRIDGE;
   }
 
-  // Re-stamp every overpass tile for the current state:
-  //   • editing OR materialised -> show the real concrete/bridge tile
-  //   • otherwise               -> render as floor (invisible overpass)
-  // Concrete is always passable; the bridge border only walls the road once the
-  // overpass has materialised.
+  // Stamp one cell's rendered tile + collision from base terrain + overpass.
+  //   • overpass hidden (play, not materialised) -> the base terrain shows &
+  //     collides exactly as if the overpass weren't there.
+  //   • overpass shown (editing OR materialised)  -> the concrete/bridge shows.
+  //     Concrete is passable; the bridge only walls once materialised.
+  stampCell(x, y) {
+    const op = this.overpass[y][x];
+    const base = this.tiles[y][x];
+    const show = op && (this.editing || this.overpassActive);
+    let idx;
+    let collide;
+    if (show) {
+      idx = this.tileIndex(x, y, op);
+      collide = this.overpassActive && op === TILES.BRIDGE;
+    } else {
+      idx = this.tileIndex(x, y, base);
+      collide = base !== TILES.GROUND;
+    }
+    const tile = this.map.putTileAt(idx, x, y, false, this.layer);
+    if (tile) tile.setCollision(collide);
+  }
+
   restampOverpass() {
-    const show = this.editing || this.overpassActive;
     for (let y = 0; y < MAP_H; y += 1) {
       for (let x = 0; x < MAP_W; x += 1) {
-        const type = this.tiles[y][x];
-        if (type !== TILES.CONCRETE && type !== TILES.BRIDGE) continue;
-        const idx = show ? this.tileIndex(x, y, type) : this.groundIndex(x, y);
-        const tile = this.map.putTileAt(idx, x, y, false, this.layer);
-        if (tile) tile.setCollision(this.overpassActive && type === TILES.BRIDGE);
+        if (this.overpass[y][x]) this.stampCell(x, y);
       }
     }
   }
 
-  // Live edit: change one tile in the data grid, the rendered layer, and its
-  // collision flag (so painting walls blocks the car immediately on play).
+  // Live edit. Concrete/Bridge brushes paint the OVERPASS overlay (terrain
+  // underneath is preserved); the other brushes paint the base terrain and
+  // clear any overpass there.
   paintTile(x, y, value) {
     if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return false;
-    if (this.tiles[y][x] === value) return false;
-    this.tiles[y][x] = value;
-    const overpassTile = value === TILES.CONCRETE || value === TILES.BRIDGE;
-    const show = this.editing || this.overpassActive;
-    const idx = overpassTile && !show ? this.groundIndex(x, y) : this.tileIndex(x, y, value);
-    const tile = this.map.putTileAt(idx, x, y, false, this.layer);
-    if (tile) {
-      if (overpassTile) {
-        tile.setCollision(this.overpassActive && value === TILES.BRIDGE);
-      } else {
-        tile.setCollision(value !== TILES.GROUND);
-      }
+    if (value === TILES.CONCRETE || value === TILES.BRIDGE) {
+      if (this.overpass[y][x] === value) return false;
+      this.overpass[y][x] = value;
+    } else {
+      if (this.tiles[y][x] === value && !this.overpass[y][x]) return false;
+      this.tiles[y][x] = value;
+      this.overpass[y][x] = 0;
     }
+    this.stampCell(x, y);
     return true;
   }
 
@@ -363,10 +377,9 @@ export default class GameScene extends Phaser.Scene {
 
   walkable(x, y) {
     if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return false;
-    const t = this.tiles[y][x];
-    if (t === TILES.GROUND || t === TILES.CONCRETE) return true;
-    if (t === TILES.BRIDGE) return !this.overpassActive; // bridge is floor until it solidifies
-    return false;
+    const op = this.overpass[y][x];
+    if (this.overpassActive && op) return op === TILES.CONCRETE; // materialised road
+    return this.tiles[y][x] === TILES.GROUND; // base terrain
   }
 
   setupInput() {
@@ -386,6 +399,9 @@ export default class GameScene extends Phaser.Scene {
   }
 
   update() {
+    // The clock keeps running through everything (manual tasks cost time) —
+    // update it before the early-outs.
+    if (this.runActive) this.scene.get('UI').setTimer(this.elapsed());
     if (this.editing) {
       this.editor?.update();
       return;
@@ -396,11 +412,17 @@ export default class GameScene extends Phaser.Scene {
     this.checkTriggers();
   }
 
+  elapsed() {
+    return this.time.now - this.runStartMs;
+  }
+
   // Car chosen at the select screen (or, later, the opening sequence).
   chooseCar(isICap) {
     this.isICap = isICap;
     this.driver.setTexture(isICap ? 'car-icap' : 'car-old');
     this.selecting = false;
+    this.runStartMs = this.time.now; // the run (and clock) begins now
+    this.runActive = true;
   }
 
   // --- collection triggers ---------------------------------------------------
@@ -502,12 +524,19 @@ export default class GameScene extends Phaser.Scene {
     this.restampOverpass();
   }
 
+  // Finish -> architecting (assembly). The clock stops when assembly completes,
+  // NOT at the finish line.
   startFinish() {
     this.interacting = true;
     this.finished = true;
     this.driver.body.setVelocity(0, 0);
-    runFinish(this, this.scene.get('UI'), { isICap: this.isICap }, () => {
-      this.interacting = false;
+    const ui = this.scene.get('UI');
+    runAssembly(this, ui, { isICap: this.isICap, inventory: this.inventory }, () => {
+      const ms = this.elapsed();
+      this.runActive = false;
+      ui.setTimer(ms); // freeze on the final time
+      const best = recordBestTime(this.isICap, ms);
+      ui.showResults({ ms, isICap: this.isICap, best }, () => window.location.reload());
     });
   }
 
@@ -586,7 +615,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   getMapData() {
-    return { tiles: this.tiles, pois: this.pois };
+    return { tiles: this.tiles, overpass: this.overpass, pois: this.pois };
   }
 
   persist() {
@@ -619,7 +648,7 @@ export default class GameScene extends Phaser.Scene {
     if (this.overpassActive && this.isICap) {
       const tx = Math.floor(this.driver.x / TILE_SIZE);
       const ty = Math.floor(this.driver.y / TILE_SIZE);
-      if (this.tiles[ty]?.[tx] === TILES.CONCRETE) return OVERPASS_BOOST;
+      if (this.overpass[ty]?.[tx] === TILES.CONCRETE) return OVERPASS_BOOST;
     }
     return 1;
   }

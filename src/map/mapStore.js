@@ -1,5 +1,6 @@
 import {
   defaultTiles,
+  defaultOverpass,
   defaultPois,
   TILES,
   MAP_W,
@@ -22,7 +23,7 @@ import {
 
 // Bump this when the committed map changes (dimensions or POIs) so stale
 // browser saves from earlier iterations are discarded rather than loaded.
-const KEY = 'drive.level1.map.v4';
+const KEY = 'drive.level1.map.v5'; // v5: split base terrain + overpass overlay
 
 export { TILES, MAP_W, MAP_H };
 
@@ -31,15 +32,25 @@ function clonePois(pois) {
 }
 
 function defaultMap() {
-  return { w: MAP_W, h: MAP_H, tiles: defaultTiles(), pois: defaultPois() };
+  return {
+    w: MAP_W,
+    h: MAP_H,
+    tiles: defaultTiles(),
+    overpass: defaultOverpass(),
+    pois: defaultPois(),
+  };
 }
 
-function encodeRows(tiles) {
-  return tiles.map((row) => row.join(''));
+function encodeRows(grid) {
+  return grid.map((row) => row.join(''));
 }
 
 function decodeRows(rows) {
   return rows.map((s) => s.split('').map((c) => Number(c)));
+}
+
+function zeros() {
+  return Array.from({ length: MAP_H }, () => Array.from({ length: MAP_W }, () => 0));
 }
 
 function isValid(data) {
@@ -73,7 +84,8 @@ export function loadMap() {
         const tiles = decodeRows(data.tiles);
         const pois = clonePois(data.pois);
         if (startIsOnGround(tiles, pois)) {
-          return { w: data.w, h: data.h, tiles, pois };
+          const overpass = data.overpass ? decodeRows(data.overpass) : zeros();
+          return { w: data.w, h: data.h, tiles, overpass, pois };
         }
       }
     }
@@ -83,9 +95,15 @@ export function loadMap() {
   return defaultMap();
 }
 
-export function saveMap({ tiles, pois }) {
+export function saveMap({ tiles, overpass, pois }) {
   try {
-    const data = { w: MAP_W, h: MAP_H, tiles: encodeRows(tiles), pois };
+    const data = {
+      w: MAP_W,
+      h: MAP_H,
+      tiles: encodeRows(tiles),
+      overpass: encodeRows(overpass),
+      pois,
+    };
     localStorage.setItem(KEY, JSON.stringify(data));
     return true;
   } catch (e) {
@@ -94,9 +112,9 @@ export function saveMap({ tiles, pois }) {
 }
 
 // Pretty JSON for download / committing as the canonical map.
-export function exportJson({ tiles, pois }) {
+export function exportJson({ tiles, overpass, pois }) {
   return JSON.stringify(
-    { w: MAP_W, h: MAP_H, tiles: encodeRows(tiles), pois },
+    { w: MAP_W, h: MAP_H, tiles: encodeRows(tiles), overpass: encodeRows(overpass), pois },
     null,
     2,
   );

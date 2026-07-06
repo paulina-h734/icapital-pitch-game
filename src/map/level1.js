@@ -21,8 +21,16 @@ export const MAP_W = data.w;
 export const MAP_H = data.h;
 
 // Decode the committed default map (tiles stored one digit-string per row).
+// `tiles` is the base terrain (ground/tree/bush); `overpass` is a separate
+// overlay (0 = none, CONCRETE, BRIDGE) that sits ON TOP without disturbing the
+// terrain underneath.
 export function defaultTiles() {
   return data.tiles.map((row) => row.split('').map((c) => Number(c)));
+}
+
+export function defaultOverpass() {
+  const rows = data.overpass || data.tiles.map((row) => '0'.repeat(row.length));
+  return rows.map((row) => row.split('').map((c) => Number(c)));
 }
 
 export function defaultPois() {
