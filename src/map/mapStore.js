@@ -20,9 +20,9 @@ import {
 // compact in localStorage.
 // ---------------------------------------------------------------------------
 
-// Bump this when the committed map's dimensions change so stale browser saves
-// from earlier iterations are discarded rather than loaded.
-const KEY = 'drive.level1.map.v2';
+// Bump this when the committed map changes (dimensions or POIs) so stale
+// browser saves from earlier iterations are discarded rather than loaded.
+const KEY = 'drive.level1.map.v3';
 
 export { TILES, MAP_W, MAP_H };
 

@@ -16,12 +16,40 @@ import { generateClues } from './mathClues.js';
 export function runCagedAltTask(scene, ui, opts, onComplete) {
   const kb = scene.input.keyboard;
   const clues = generateClues(3);
+  const els = [];
+  const cageParts = [];
   let state = opts.isICap ? 'collect' : 'intro';
   let idx = 0;
   let input = '';
 
+  const cx = ui.W / 2;
+  const cy = ui.H * 0.3;
+
+  // The caged asset is a triangle behind cage bars, shown from the first prompt;
+  // the bars fade away when the clues are cracked.
+  function build() {
+    const asset = ui.add
+      .triangle(cx, cy, 0, -46, 48, 44, -48, 44, 0xf0932b)
+      .setStrokeStyle(3, 0x1a1a1a);
+    els.push(asset);
+    const top = ui.add.rectangle(cx, cy - 58, 132, 12, 0x2b3346).setStrokeStyle(1, 0x11151f);
+    const bot = ui.add.rectangle(cx, cy + 58, 132, 12, 0x2b3346).setStrokeStyle(1, 0x11151f);
+    cageParts.push(top, bot);
+    for (let i = -2; i <= 2; i += 1) {
+      const bar = ui.add.rectangle(cx + i * 28, cy, 8, 112, 0x2b3346).setStrokeStyle(1, 0x11151f);
+      cageParts.push(bar);
+    }
+    els.push(...cageParts);
+  }
+
+  function openCage() {
+    cageParts.forEach((p) => p.setAlpha(0.12));
+  }
+
   function finish() {
     kb.off('keydown', onKey);
+    els.forEach((e) => e.destroy());
+    els.length = 0;
     ui.hidePrompt();
     onComplete();
   }
@@ -59,6 +87,7 @@ export function runCagedAltTask(scene, ui, opts, onComplete) {
           idx += 1;
           if (idx >= clues.length) {
             state = 'collect';
+            openCage();
             showUnlock();
           } else {
             showClue(false);
@@ -80,7 +109,9 @@ export function runCagedAltTask(scene, ui, opts, onComplete) {
     }
   }
 
+  build();
   if (opts.isICap) {
+    openCage();
     ui.showPrompt({
       title: 'iCapCar · diligence',
       body: 'iCapCar ran full diligence on this alternative and cleared the cage automatically.',

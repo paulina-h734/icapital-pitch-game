@@ -35,7 +35,11 @@ export function runDebrisAltTask(scene, ui, opts, onComplete) {
   }
 
   function build() {
-    const asset = ui.add.circle(cx, cy, 48, 0xf0932b).setStrokeStyle(3, 0x1a1a1a);
+    // The asset under the debris is a diamond, matching its map marker.
+    const asset = ui.add
+      .rectangle(cx, cy, 66, 66, 0xf0932b)
+      .setStrokeStyle(3, 0x1a1a1a)
+      .setAngle(45);
     els.push(asset);
     if (!opts.isICap) {
       dirt = ui.add

@@ -19,8 +19,11 @@ import MapEditor from '../editor/MapEditor.js';
 import { runCagedAltTask } from '../tasks/cagedAlt.js';
 import { runDebrisAltTask } from '../tasks/debrisAlt.js';
 import { runDisguiseAltTask } from '../tasks/disguiseAlt.js';
+import { runKycGate } from '../tasks/kycGate.js';
+import { runOverpassButton } from '../tasks/overpassButton.js';
+import { runFinish } from '../tasks/finish.js';
 
-// Proximity (in tiles) at which driving into an alt triggers its task.
+// Proximity (in tiles) at which driving into an alt/button/finish triggers it.
 const TRIGGER_RADIUS = 1.3;
 // Alt POI type -> its collection task. All 3 must be collected before KYC 1.
 const ALT_TASKS = {
@@ -28,6 +31,15 @@ const ALT_TASKS = {
   'alt-debris': runDebrisAltTask,
   'alt-disguise': runDisguiseAltTask,
 };
+
+// KYC customs gates: a barrier across the road that opens once verified.
+// KYC 1 also requires all alts collected first; KYC 2 is just re-verification.
+const GATES = {
+  kyc1: { requiresAlts: true },
+  kyc2: { requiresAlts: false },
+};
+const GATE_RADIUS = 2.0; // tiles — fires the checkpoint before the barrier
+const ALT_COUNT = 3;
 
 // ---------------------------------------------------------------------------
 // GameScene — open-world roaming: continuous 8-directional driving (physics
@@ -45,6 +57,7 @@ const POI_COLORS = {
   kyc: 0x2d6cdf, // KYC customs
   finish: 0xe24b4a,
   start: 0x2ecc71,
+  overpass: 0x7f5fd6, // document overpass button
 };
 
 export default class GameScene extends Phaser.Scene {
@@ -75,6 +88,18 @@ export default class GameScene extends Phaser.Scene {
     this.interacting = false;
     this.collected = new Set();
     this.inventory = [];
+
+    // Client identity for KYC — set by the opening sequence (step 5); defaults
+    // keep the gate playable until then.
+    if (!this.registry.has('clientName')) this.registry.set('clientName', 'Jordan');
+    if (!this.registry.has('clientFood')) this.registry.set('clientFood', 'pizza');
+
+    // KYC gate state + physical barriers across the road.
+    this.gatesOpen = new Set();
+    this.gateBarriers = {};
+    this.inRange = new Set(); // rising-edge tracking so gates/buttons don't re-fire
+    this.finished = false;
+    this.setupGates();
 
     // Parallel HUD/prompt scene (crisp screen-space UI at zoom 1).
     if (!this.scene.isActive('UI')) this.scene.launch('UI');
@@ -149,6 +174,9 @@ export default class GameScene extends Phaser.Scene {
         break;
       case 'finish':
         marker = this.add.rectangle(px, py, TILE_SIZE * 0.7, TILE_SIZE * 0.7, POI_COLORS.finish);
+        break;
+      case 'overpass':
+        marker = this.add.rectangle(px, py, TILE_SIZE * 0.6, TILE_SIZE * 0.6, POI_COLORS.overpass);
         break;
       case 'start':
       default:
@@ -323,25 +351,147 @@ export default class GameScene extends Phaser.Scene {
 
   // --- collection triggers ---------------------------------------------------
 
-  // Drive into an uncollected alt to start its task. The radius deactivates once
-  // collected (it's in `this.collected`), so it never re-fires.
+  near(poi, radiusTiles) {
+    const { px, py } = this.tileToWorld(poi.x, poi.y);
+    return (
+      Phaser.Math.Distance.Between(this.driver.x, this.driver.y, px, py) < TILE_SIZE * radiusTiles
+    );
+  }
+
   checkTriggers() {
+    // Alts: one-shot on proximity; deactivate once collected.
     for (const poi of this.pois) {
       const task = ALT_TASKS[poi.type];
       if (!task || this.collected.has(poi.type)) continue;
-      const { px, py } = this.tileToWorld(poi.x, poi.y);
-      const dist = Phaser.Math.Distance.Between(this.driver.x, this.driver.y, px, py);
-      if (dist < TILE_SIZE * TRIGGER_RADIUS) {
+      if (this.near(poi, TRIGGER_RADIUS)) {
         this.startTask(poi, task);
         return;
       }
     }
+    // Gates: fire on the rising edge (entering range) so a shut gate you're
+    // parked against doesn't re-prompt every frame.
+    for (const poi of this.pois) {
+      if (!GATES[poi.type] || this.gatesOpen.has(poi.type)) continue;
+      const nowIn = this.near(poi, GATE_RADIUS);
+      const wasIn = this.inRange.has(poi.type);
+      if (nowIn && !wasIn) {
+        this.inRange.add(poi.type);
+        this.startKycGate(poi);
+        return;
+      }
+      if (!nowIn && wasIn) this.inRange.delete(poi.type);
+    }
+    // Overpass button: re-pressable, rising-edge.
+    const button = this.poiByType('overpass');
+    if (button) {
+      const nowIn = this.near(button, TRIGGER_RADIUS);
+      const wasIn = this.inRange.has('overpass');
+      if (nowIn && !wasIn) {
+        this.inRange.add('overpass');
+        this.startOverpass(button);
+        return;
+      }
+      if (!nowIn && wasIn) this.inRange.delete('overpass');
+    }
+    // Finish: one-shot.
+    const fin = this.poiByType('finish');
+    if (fin && !this.finished && this.near(fin, TRIGGER_RADIUS)) {
+      this.startFinish();
+    }
+  }
+
+  poiByType(type) {
+    return this.pois.find((p) => p.type === type);
   }
 
   startTask(poi, task) {
     this.interacting = true;
     this.driver.body.setVelocity(0, 0);
     task(this, this.scene.get('UI'), { isICap: this.isICap }, () => this.finishTask(poi));
+  }
+
+  startKycGate(poi) {
+    this.interacting = true;
+    this.driver.body.setVelocity(0, 0);
+    const requiresAlts = GATES[poi.type].requiresAlts;
+    runKycGate(
+      this,
+      this.scene.get('UI'),
+      {
+        isICap: this.isICap,
+        allCollected: requiresAlts ? this.collected.size >= ALT_COUNT : true,
+        collectedCount: this.collected.size,
+        clientName: this.registry.get('clientName'),
+        clientFood: this.registry.get('clientFood'),
+      },
+      (passed) => {
+        this.interacting = false;
+        if (passed) this.openGate(poi.type);
+      },
+    );
+  }
+
+  startOverpass() {
+    this.interacting = true;
+    this.driver.body.setVelocity(0, 0);
+    runOverpassButton(this, this.scene.get('UI'), { isICap: this.isICap }, () => {
+      this.interacting = false;
+      // step 3: on iCapCar, materialize the overpass road + speed boost here.
+    });
+  }
+
+  startFinish() {
+    this.interacting = true;
+    this.finished = true;
+    this.driver.body.setVelocity(0, 0);
+    runFinish(this, this.scene.get('UI'), { isICap: this.isICap }, () => {
+      this.interacting = false;
+    });
+  }
+
+  // Build a barrier bar across the corridor at each gate POI.
+  setupGates() {
+    for (const poi of this.pois) {
+      if (GATES[poi.type]) this.createBarrier(poi);
+    }
+  }
+
+  createBarrier(poi) {
+    const [l, r] = this.freeSpan(poi.x, poi.y, 1, 0);
+    const [u, dn] = this.freeSpan(poi.x, poi.y, 0, 1);
+    const vertical = u + dn > l + r; // vertical corridor -> horizontal barrier
+    let cxWorld = poi.x * TILE_SIZE + TILE_SIZE / 2;
+    let cyWorld = poi.y * TILE_SIZE + TILE_SIZE / 2;
+    let w;
+    let h;
+    if (vertical) {
+      cxWorld = (poi.x + (r - l) / 2) * TILE_SIZE + TILE_SIZE / 2;
+      w = (l + r + 1) * TILE_SIZE;
+      h = TILE_SIZE * 0.6;
+    } else {
+      cyWorld = (poi.y + (dn - u) / 2) * TILE_SIZE + TILE_SIZE / 2;
+      w = TILE_SIZE * 0.6;
+      h = (u + dn + 1) * TILE_SIZE;
+    }
+    const barrier = this.add
+      .rectangle(cxWorld, cyWorld, w, h, 0xf0a020)
+      .setStrokeStyle(3, 0x1a1a1a)
+      .setDepth(4);
+    this.physics.add.existing(barrier, true);
+    const collider = this.physics.add.collider(this.driver, barrier);
+    this.gateBarriers[poi.type] = { barrier, collider };
+  }
+
+  openGate(type) {
+    this.gatesOpen.add(type);
+    const g = this.gateBarriers[type];
+    if (g) {
+      this.physics.world.removeCollider(g.collider);
+      g.barrier.destroy();
+      delete this.gateBarriers[type];
+    }
+    const obj = this.poiObjects[type];
+    if (obj) obj.marker.setFillStyle(0x2ecc71).setAlpha(0.6); // opened
   }
 
   finishTask(poi) {
