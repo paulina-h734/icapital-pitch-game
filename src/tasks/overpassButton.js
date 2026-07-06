@@ -15,7 +15,7 @@ export function runOverpassButton(scene, ui, opts, onComplete) {
   function done() {
     kb.off('keydown', onKey);
     ui.hidePrompt();
-    onComplete();
+    onComplete(!!opts.isICap); // materialised only on the iCapCar
   }
 
   function onKey(e) {

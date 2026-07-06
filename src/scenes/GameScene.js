@@ -3,6 +3,7 @@ import {
   TILE_SIZE,
   RENDER_SCALE,
   CAR_SPEED,
+  OVERPASS_BOOST,
   CAM_TRAVEL_SMOOTH,
   CAM_CROSS_SMOOTH,
   CORRIDOR_RATIO,
@@ -82,9 +83,10 @@ export default class GameScene extends Phaser.Scene {
     this.overview = false;
     this.editing = false;
 
-    // Task / collection state. isICap flips to true on an iCapCar run (step 3);
-    // OLD car for now.
+    // Task / collection state. isICap is chosen at the car select below.
     this.isICap = false;
+    this.selecting = true; // paused until a car is chosen
+    this.overpassActive = false;
     this.interacting = false;
     this.collected = new Set();
     this.inventory = [];
@@ -103,6 +105,13 @@ export default class GameScene extends Phaser.Scene {
 
     // Parallel HUD/prompt scene (crisp screen-space UI at zoom 1).
     if (!this.scene.isActive('UI')) this.scene.launch('UI');
+
+    // Car select at run start (Step 5's opening sequence replaces this). Show it
+    // once the UI scene is ready.
+    const ui = this.scene.get('UI');
+    const showSelect = () => ui.showCarSelect((isICap) => this.chooseCar(isICap));
+    if (this.scene.isActive('UI')) showSelect();
+    else ui.events.once(Phaser.Scenes.Events.CREATE, showSelect);
 
     // Debug map editor — dev-only so it never ships in the pitch build.
     if (DEV) {
@@ -124,16 +133,42 @@ export default class GameScene extends Phaser.Scene {
     });
     const tileset = this.map.addTilesetImage(TILESET_KEY, TILESET_KEY, TILE_SIZE, TILE_SIZE);
     this.layer = this.map.createLayer(0, tileset, 0, 0).setDepth(0);
-    // Trees and bushes collide; ground (indices 0/1) is walkable.
+    // Trees and bushes collide; ground is walkable.
     this.layer.setCollisionByExclusion([TILE_INDEX.GROUND, TILE_INDEX.GROUND_ALT]);
+    // The overpass (concrete + bridge) is invisible & passable in play until it
+    // materialises — render it as floor for now (visible again in the editor).
+    this.restampOverpass();
   }
 
-  // Tile type + position -> tileset index (ground checkers by parity).
+  groundIndex(x, y) {
+    return (x + y) % 2 === 0 ? TILE_INDEX.GROUND : TILE_INDEX.GROUND_ALT;
+  }
+
+  // Tile type + position -> its own tileset index.
   tileIndex(x, y, tile) {
-    if (tile === TILES.GROUND) {
-      return (x + y) % 2 === 0 ? TILE_INDEX.GROUND : TILE_INDEX.GROUND_ALT;
+    if (tile === TILES.GROUND) return this.groundIndex(x, y);
+    if (tile === TILES.TREE) return TILE_INDEX.TREE;
+    if (tile === TILES.BUSH) return TILE_INDEX.BUSH;
+    if (tile === TILES.CONCRETE) return TILE_INDEX.CONCRETE;
+    return TILE_INDEX.BRIDGE;
+  }
+
+  // Re-stamp every overpass tile for the current state:
+  //   • editing OR materialised -> show the real concrete/bridge tile
+  //   • otherwise               -> render as floor (invisible overpass)
+  // Concrete is always passable; the bridge border only walls the road once the
+  // overpass has materialised.
+  restampOverpass() {
+    const show = this.editing || this.overpassActive;
+    for (let y = 0; y < MAP_H; y += 1) {
+      for (let x = 0; x < MAP_W; x += 1) {
+        const type = this.tiles[y][x];
+        if (type !== TILES.CONCRETE && type !== TILES.BRIDGE) continue;
+        const idx = show ? this.tileIndex(x, y, type) : this.groundIndex(x, y);
+        const tile = this.map.putTileAt(idx, x, y, false, this.layer);
+        if (tile) tile.setCollision(this.overpassActive && type === TILES.BRIDGE);
+      }
     }
-    return tile === TILES.TREE ? TILE_INDEX.TREE : TILE_INDEX.BUSH;
   }
 
   // Live edit: change one tile in the data grid, the rendered layer, and its
@@ -142,8 +177,17 @@ export default class GameScene extends Phaser.Scene {
     if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return false;
     if (this.tiles[y][x] === value) return false;
     this.tiles[y][x] = value;
-    const tile = this.map.putTileAt(this.tileIndex(x, y, value), x, y, false, this.layer);
-    if (tile) tile.setCollision(value !== TILES.GROUND);
+    const overpassTile = value === TILES.CONCRETE || value === TILES.BRIDGE;
+    const show = this.editing || this.overpassActive;
+    const idx = overpassTile && !show ? this.groundIndex(x, y) : this.tileIndex(x, y, value);
+    const tile = this.map.putTileAt(idx, x, y, false, this.layer);
+    if (tile) {
+      if (overpassTile) {
+        tile.setCollision(this.overpassActive && value === TILES.BRIDGE);
+      } else {
+        tile.setCollision(value !== TILES.GROUND);
+      }
+    }
     return true;
   }
 
@@ -319,7 +363,10 @@ export default class GameScene extends Phaser.Scene {
 
   walkable(x, y) {
     if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return false;
-    return this.tiles[y][x] === TILES.GROUND;
+    const t = this.tiles[y][x];
+    if (t === TILES.GROUND || t === TILES.CONCRETE) return true;
+    if (t === TILES.BRIDGE) return !this.overpassActive; // bridge is floor until it solidifies
+    return false;
   }
 
   setupInput() {
@@ -343,10 +390,17 @@ export default class GameScene extends Phaser.Scene {
       this.editor?.update();
       return;
     }
-    if (this.overview || this.interacting) return;
+    if (this.selecting || this.overview || this.interacting) return;
     this.handleMovement();
     this.updateCamera();
     this.checkTriggers();
+  }
+
+  // Car chosen at the select screen (or, later, the opening sequence).
+  chooseCar(isICap) {
+    this.isICap = isICap;
+    this.driver.setTexture(isICap ? 'car-icap' : 'car-old');
+    this.selecting = false;
   }
 
   // --- collection triggers ---------------------------------------------------
@@ -434,10 +488,18 @@ export default class GameScene extends Phaser.Scene {
   startOverpass() {
     this.interacting = true;
     this.driver.body.setVelocity(0, 0);
-    runOverpassButton(this, this.scene.get('UI'), { isICap: this.isICap }, () => {
+    runOverpassButton(this, this.scene.get('UI'), { isICap: this.isICap }, (materialized) => {
       this.interacting = false;
-      // step 3: on iCapCar, materialize the overpass road + speed boost here.
+      if (materialized) this.activateOverpass();
     });
+  }
+
+  // iCapCar only: the overpass materialises — the concrete road the player drew
+  // appears (walkable, boosts) with its bridge borders. Rusty car never gets here.
+  activateOverpass() {
+    if (this.overpassActive) return;
+    this.overpassActive = true;
+    this.restampOverpass();
   }
 
   startFinish() {
@@ -514,6 +576,7 @@ export default class GameScene extends Phaser.Scene {
     if (on) this.driver.body.setVelocity(0, 0);
     this.driver.setVisible(!on);
     Object.values(this.poiObjects).forEach((o) => o.label.setVisible(on));
+    this.restampOverpass(); // show the overpass tiles while editing, hide in play
   }
 
   respawnDriverAtStart() {
@@ -545,10 +608,20 @@ export default class GameScene extends Phaser.Scene {
 
     const v = new Phaser.Math.Vector2(vx, vy);
     if (v.lengthSq() > 0) {
-      v.normalize().scale(CAR_SPEED);
+      v.normalize().scale(CAR_SPEED * this.speedMultiplier());
       this.orient(vx, vy);
     }
     this.driver.body.setVelocity(v.x, v.y);
+  }
+
+  // Boosted only while the iCapCar is driving on a materialised concrete tile.
+  speedMultiplier() {
+    if (this.overpassActive && this.isICap) {
+      const tx = Math.floor(this.driver.x / TILE_SIZE);
+      const ty = Math.floor(this.driver.y / TILE_SIZE);
+      if (this.tiles[ty]?.[tx] === TILES.CONCRETE) return OVERPASS_BOOST;
+    }
+    return 1;
   }
 
   // Placeholder orientation: rotate the rear-view box toward travel (vertical

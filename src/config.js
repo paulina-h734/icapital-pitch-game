@@ -19,7 +19,8 @@ export const RENDER_SCALE = 3;
 
 // Movement: continuous, physics-driven (velocity + slide-along-walls), 8-way.
 // The car is no longer snapped to the tile grid.
-export const CAR_SPEED = 210; // px/s for the old car (base speed)
+export const CAR_SPEED = 210; // px/s (base speed — same for both cars, honest timing)
+export const OVERPASS_BOOST = 1.8; // iCapCar's speed multiplier on the overpass
 
 // Camera (Stardew-style follow). It follows the CAR directly, with per-axis
 // smoothing: responsive along the direction of travel (so the car never reaches

@@ -13,6 +13,8 @@ export const TILES = {
   GROUND: 0, // walkable
   TREE: 1, // impassable wall
   BUSH: 2, // impassable soft edge
+  CONCRETE: 3, // overpass road — walkable only once the overpass materialises
+  BRIDGE: 4, // overpass border/railing — always impassable
 };
 
 export const MAP_W = data.w;

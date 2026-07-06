@@ -23,6 +23,8 @@ const BRUSHES = [
   { label: 'Ground', val: TILES.GROUND },
   { label: 'Tree', val: TILES.TREE },
   { label: 'Bush', val: TILES.BUSH },
+  { label: 'Concrete', val: TILES.CONCRETE },
+  { label: 'Bridge', val: TILES.BRIDGE },
 ];
 
 const POI_BUTTONS = [

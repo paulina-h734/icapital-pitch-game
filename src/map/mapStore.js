@@ -22,7 +22,7 @@ import {
 
 // Bump this when the committed map changes (dimensions or POIs) so stale
 // browser saves from earlier iterations are discarded rather than loaded.
-const KEY = 'drive.level1.map.v3';
+const KEY = 'drive.level1.map.v4';
 
 export { TILES, MAP_W, MAP_H };
 

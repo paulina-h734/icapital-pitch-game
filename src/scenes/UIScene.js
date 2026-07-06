@@ -24,6 +24,61 @@ export default class UIScene extends Phaser.Scene {
     this.hidePrompt();
   }
 
+  // Minimal car select at run start (the full opening sequence — step 5 — will
+  // own this and also capture the client name/food). Called by GameScene.
+  showCarSelect(onChoose) {
+    const { W, H } = this;
+    const els = [];
+    els.push(this.add.rectangle(0, 0, W, H, 0x0b1020, 0.85).setOrigin(0).setDepth(50));
+    els.push(
+      this.add
+        .text(W / 2, H * 0.2, 'Choose your vehicle', {
+          fontFamily: 'sans-serif',
+          fontSize: '30px',
+          color: '#eef3ff',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setDepth(51),
+    );
+
+    const card = (cx, carColor, name, sub, isICap) => {
+      const panel = this.add
+        .rectangle(cx, H * 0.53, 300, 250, 0x141c30, 0.98)
+        .setStrokeStyle(2, 0x46608f)
+        .setInteractive({ useHandCursor: true })
+        .setDepth(51);
+      const car = this.add
+        .rectangle(cx, H * 0.53 - 44, 58, 72, carColor)
+        .setStrokeStyle(3, 0x1a1a1a)
+        .setDepth(52);
+      const t = this.add
+        .text(cx, H * 0.53 + 40, name, { fontFamily: 'sans-serif', fontSize: '22px', color: '#eef3ff' })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setDepth(52);
+      const s = this.add
+        .text(cx, H * 0.53 + 74, sub, {
+          fontFamily: 'sans-serif',
+          fontSize: '15px',
+          color: '#9fb0d0',
+          wordWrap: { width: 260 },
+          align: 'center',
+        })
+        .setOrigin(0.5, 0)
+        .setResolution(2)
+        .setDepth(52);
+      panel.on('pointerdown', () => {
+        els.forEach((e) => e.destroy());
+        onChoose(isICap);
+      });
+      els.push(panel, car, t, s);
+    };
+
+    card(W / 2 - 175, 0xb5442f, 'Rusty car', 'Going it alone — every step by hand.', false);
+    card(W / 2 + 175, 0x2d6cdf, 'iCapCar', 'On the iCapital platform — it does the work.', true);
+  }
+
   // --- inventory HUD ---------------------------------------------------------
 
   buildInventory() {
