@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { TILE_SIZE, VIEW_TILES_X, VIEW_TILES_Y, RENDER_SCALE } from './config.js';
+import OpeningScene from './scenes/OpeningScene.js';
 import GameScene from './scenes/GameScene.js';
 import UIScene from './scenes/UIScene.js';
 
@@ -22,7 +23,7 @@ const config = {
     default: 'arcade',
     arcade: { debug: false },
   },
-  scene: [GameScene, UIScene],
+  scene: [OpeningScene, GameScene, UIScene],
 };
 
 const game = new Phaser.Game(config);

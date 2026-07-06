@@ -75,6 +75,9 @@ export default class GameScene extends Phaser.Scene {
     this.overpass = map.overpass; // overlay (0 / CONCRETE / BRIDGE), on top of terrain
     this.pois = map.pois;
 
+    // Car + client identity are chosen in the opening sequence (OpeningScene).
+    this.isICap = !!this.registry.get('isICap');
+
     this.drawMap();
     this.drawPois();
     this.createDriver();
@@ -85,19 +88,21 @@ export default class GameScene extends Phaser.Scene {
     this.overview = false;
     this.editing = false;
 
-    // Task / collection state. isICap is chosen at the car select below.
-    this.isICap = false;
-    this.selecting = true; // paused until a car is chosen
+    // Task / collection state.
     this.overpassActive = false;
     this.interacting = false;
     this.collected = new Set();
     this.inventory = [];
-    // Run timer: starts when a car is chosen, stops at the end of architecting.
-    this.runStartMs = 0;
+    // The clock doesn't run until the driver actually takes off — the timer
+    // shows 0:00.0 and only starts on the first movement input (set in
+    // startRun, from handleMovement). Keeps the two-car contrast honest: no
+    // reaction/orientation time counted, only driving + tasks.
+    this.runStartMs = this.time.now;
+    this.runStarted = false;
     this.runActive = false;
 
-    // Client identity for KYC — set by the opening sequence (step 5); defaults
-    // keep the gate playable until then.
+    // Client identity for KYC — set by the opening sequence; defaults keep the
+    // gate playable if GameScene is launched standalone (dev).
     if (!this.registry.has('clientName')) this.registry.set('clientName', 'Jordan');
     if (!this.registry.has('clientFood')) this.registry.set('clientFood', 'pizza');
 
@@ -110,13 +115,6 @@ export default class GameScene extends Phaser.Scene {
 
     // Parallel HUD/prompt scene (crisp screen-space UI at zoom 1).
     if (!this.scene.isActive('UI')) this.scene.launch('UI');
-
-    // Car select at run start (Step 5's opening sequence replaces this). Show it
-    // once the UI scene is ready.
-    const ui = this.scene.get('UI');
-    const showSelect = () => ui.showCarSelect((isICap) => this.chooseCar(isICap));
-    if (this.scene.isActive('UI')) showSelect();
-    else ui.events.once(Phaser.Scenes.Events.CREATE, showSelect);
 
     // Debug map editor — dev-only so it never ships in the pitch build.
     if (DEV) {
@@ -288,7 +286,9 @@ export default class GameScene extends Phaser.Scene {
   createDriver() {
     const start = this.startPoi();
     const { px, py } = this.tileToWorld(start.x, start.y);
-    this.driver = this.physics.add.image(px, py, 'car-old').setDepth(10);
+    this.driver = this.physics.add
+      .image(px, py, this.isICap ? 'car-icap' : 'car-old')
+      .setDepth(10);
     // Body a touch smaller than the tile so the car threads gaps cleanly.
     this.driver.body.setSize(TILE_SIZE * 0.7, TILE_SIZE * 0.7, true);
     this.driver.setCollideWorldBounds(true);
@@ -400,13 +400,14 @@ export default class GameScene extends Phaser.Scene {
 
   update() {
     // The clock keeps running through everything (manual tasks cost time) —
-    // update it before the early-outs.
+    // update it before the early-outs. Before the run starts it sits at 0:00.0.
     if (this.runActive) this.scene.get('UI').setTimer(this.elapsed());
+    else if (!this.runStarted) this.scene.get('UI').setTimer(0);
     if (this.editing) {
       this.editor?.update();
       return;
     }
-    if (this.selecting || this.overview || this.interacting) return;
+    if (this.overview || this.interacting) return;
     this.handleMovement();
     this.updateCamera();
     this.checkTriggers();
@@ -414,15 +415,6 @@ export default class GameScene extends Phaser.Scene {
 
   elapsed() {
     return this.time.now - this.runStartMs;
-  }
-
-  // Car chosen at the select screen (or, later, the opening sequence).
-  chooseCar(isICap) {
-    this.isICap = isICap;
-    this.driver.setTexture(isICap ? 'car-icap' : 'car-old');
-    this.selecting = false;
-    this.runStartMs = this.time.now; // the run (and clock) begins now
-    this.runActive = true;
   }
 
   // --- collection triggers ---------------------------------------------------
@@ -487,15 +479,23 @@ export default class GameScene extends Phaser.Scene {
   }
 
   startKycGate(poi) {
+    const requiresAlts = GATES[poi.type].requiresAlts;
+    const allCollected = requiresAlts ? this.collected.size >= ALT_COUNT : true;
+    // iCapCar: Identity Solutions auto-verifies on arrival — the gate opens
+    // without stopping the car; a small speech bubble waves the client through.
+    if (this.isICap && allCollected) {
+      this.openGate(poi.type);
+      this.showGateBubble(poi, `Welcome, ${this.registry.get('clientName')} ✓`);
+      return;
+    }
     this.interacting = true;
     this.driver.body.setVelocity(0, 0);
-    const requiresAlts = GATES[poi.type].requiresAlts;
     runKycGate(
       this,
       this.scene.get('UI'),
       {
         isICap: this.isICap,
-        allCollected: requiresAlts ? this.collected.size >= ALT_COUNT : true,
+        allCollected,
         collectedCount: this.collected.size,
         clientName: this.registry.get('clientName'),
         clientFood: this.registry.get('clientFood'),
@@ -585,6 +585,38 @@ export default class GameScene extends Phaser.Scene {
     if (obj) obj.marker.setFillStyle(0x2ecc71).setAlpha(0.6); // opened
   }
 
+  // A small, non-invasive speech bubble that pops from a gate and fades — used
+  // when the iCapCar is auto-cleared through KYC without stopping.
+  showGateBubble(poi, text) {
+    const { px, py } = this.tileToWorld(poi.x, poi.y);
+    const by = py - TILE_SIZE * 1.15;
+    const bubble = this.add
+      .text(px, by, text, {
+        fontFamily: 'sans-serif',
+        fontSize: '12px',
+        color: '#0b1020',
+        backgroundColor: '#eaf3ff',
+        padding: { x: 8, y: 5 },
+      })
+      .setOrigin(0.5)
+      .setResolution(RENDER_SCALE)
+      .setDepth(30);
+    const tail = this.add
+      .triangle(px, by + bubble.height / 2 - 1, -5, 0, 5, 0, 0, 8, 0xeaf3ff)
+      .setDepth(30);
+    this.tweens.add({
+      targets: [bubble, tail],
+      y: '-=10',
+      alpha: 0,
+      delay: 1200,
+      duration: 700,
+      onComplete: () => {
+        bubble.destroy();
+        tail.destroy();
+      },
+    });
+  }
+
   finishTask(poi) {
     this.collected.add(poi.type);
     this.inventory.push(poi.type);
@@ -637,10 +669,18 @@ export default class GameScene extends Phaser.Scene {
 
     const v = new Phaser.Math.Vector2(vx, vy);
     if (v.lengthSq() > 0) {
+      if (!this.runStarted) this.startRun(); // first move starts the clock
       v.normalize().scale(CAR_SPEED * this.speedMultiplier());
       this.orient(vx, vy);
     }
     this.driver.body.setVelocity(v.x, v.y);
+  }
+
+  // The run clock starts the instant the driver first moves.
+  startRun() {
+    this.runStarted = true;
+    this.runActive = true;
+    this.runStartMs = this.time.now;
   }
 
   // Boosted only while the iCapCar is driving on a materialised concrete tile.

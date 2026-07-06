@@ -13,12 +13,12 @@
         background: #0b1020;
         overflow: hidden;
       }
+      /* Full-viewport parent; Phaser's Scale.FIT + CENTER_BOTH centres the
+         canvas inside it. (Don't also flex-centre here — the two stack and
+         push the canvas off-centre.) */
       #game {
         width: 100vw;
         height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
       }
     </style>
   </head>
