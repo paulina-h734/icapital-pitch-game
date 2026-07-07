@@ -11,8 +11,13 @@ import {
 } from '../config.js';
 import {
   makePlaceholderTextures,
+  preloadArt,
   TILESET_KEY,
   TILE_INDEX,
+  KYC_STRIPE_KEY,
+  GRASS_CORNER_KEY,
+  DIRT_CORNER_KEY,
+  CURB_KEY,
 } from '../gfx/placeholders.js';
 import { TILES, MAP_W, MAP_H } from '../map/level1.js';
 import { loadMap, saveMap } from '../map/mapStore.js';
@@ -67,6 +72,10 @@ export default class GameScene extends Phaser.Scene {
     super('Game');
   }
 
+  preload() {
+    preloadArt(this);
+  }
+
   create() {
     makePlaceholderTextures(this);
 
@@ -79,6 +88,8 @@ export default class GameScene extends Phaser.Scene {
     this.isICap = !!this.registry.get('isICap');
 
     this.drawMap();
+    this.addBorderRounding();
+    this.addOverpassCurbs();
     this.drawPois();
     this.createDriver();
     this.setupCamera();
@@ -147,13 +158,99 @@ export default class GameScene extends Phaser.Scene {
     return (x + y) % 2 === 0 ? TILE_INDEX.GROUND : TILE_INDEX.GROUND_ALT;
   }
 
+  // Round the tan/green boundary so it reads smooth instead of blocky. Purely
+  // cosmetic; collision is unchanged. Angles map the NE wedge texture to each
+  // corner (0/90/180/270 = NE/SE/SW/NW).
+  //   • OUTER (convex) corner: a walkable cell with grass on two adjacent sides
+  //     gets a grass wedge curving its corner.
+  //   • INNER (concave) corner: a grass cell with dirt on two adjacent sides —
+  //     grass poking into the road — gets a dirt wedge rounding that poke off.
+  // Overpass cells are skipped (their walkable base would otherwise get wedges
+  // that then sit on top of the materialised concrete).
+  addBorderRounding() {
+    // Wedges laid on overpass cells round the walkable path UNDERNEATH; they're
+    // hidden once the overpass materialises (activateOverpass) so they don't sit
+    // on the concrete. Wedges off the overpass are permanent.
+    this.overpassUnderRounding = [];
+    const blocked = (x, y) =>
+      x < 0 || y < 0 || x >= MAP_W || y >= MAP_H || this.tiles[y][x] !== TILES.GROUND;
+    const open = (x, y) => !blocked(x, y);
+    const place = (key, x, y, angle) => {
+      const { px, py } = this.tileToWorld(x, y);
+      const img = this.add.image(px, py, key).setDepth(1).setAngle(angle);
+      if (this.overpass[y][x]) this.overpassUnderRounding.push(img);
+    };
+    for (let y = 0; y < MAP_H; y += 1) {
+      for (let x = 0; x < MAP_W; x += 1) {
+        if (open(x, y)) {
+          // outer/convex — grass wedge on the walkable corner
+          if (blocked(x, y - 1) && blocked(x + 1, y)) place(GRASS_CORNER_KEY, x, y, 0);
+          if (blocked(x + 1, y) && blocked(x, y + 1)) place(GRASS_CORNER_KEY, x, y, 90);
+          if (blocked(x, y + 1) && blocked(x - 1, y)) place(GRASS_CORNER_KEY, x, y, 180);
+          if (blocked(x - 1, y) && blocked(x, y - 1)) place(GRASS_CORNER_KEY, x, y, 270);
+        } else {
+          // inner/concave — dirt wedge on the grass corner poking into the road
+          if (open(x, y - 1) && open(x + 1, y)) place(DIRT_CORNER_KEY, x, y, 0);
+          if (open(x + 1, y) && open(x, y + 1)) place(DIRT_CORNER_KEY, x, y, 90);
+          if (open(x, y + 1) && open(x - 1, y)) place(DIRT_CORNER_KEY, x, y, 180);
+          if (open(x - 1, y) && open(x, y - 1)) place(DIRT_CORNER_KEY, x, y, 270);
+        }
+      }
+    }
+  }
+
+  // Place the Kenney orange/white kerb along the overpass's outer edges. Each
+  // bridge cell gets a kerb overlay for every side that faces off the overpass,
+  // oriented outward (the kerb texture faces WEST at angle 0). Hidden until the
+  // overpass materialises (activateOverpass).
+  addOverpassCurbs() {
+    this.overpassCurbs = [];
+    const onOverpass = (x, y) =>
+      x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && this.overpass[y][x];
+    // Kerbs run down the road's left/right sides only — no horizontal cap across
+    // the open ends. side -> [neighbour dx, dy, angle turning the W-facing kerb].
+    const sides = [
+      [-1, 0, 0], // west
+      [1, 0, 180], // east
+    ];
+    for (let y = 0; y < MAP_H; y += 1) {
+      for (let x = 0; x < MAP_W; x += 1) {
+        if (this.overpass[y][x] !== TILES.BRIDGE) continue;
+        const { px, py } = this.tileToWorld(x, y);
+        for (const [dx, dy, angle] of sides) {
+          if (onOverpass(x + dx, y + dy)) continue; // interior edge — no kerb
+          const curb = this.add
+            .image(px, py, CURB_KEY)
+            .setDepth(3)
+            .setAngle(angle)
+            .setVisible(false);
+          this.overpassCurbs.push(curb);
+        }
+      }
+    }
+  }
+
   // Tile type + position -> its own tileset index.
   tileIndex(x, y, tile) {
     if (tile === TILES.GROUND) return this.groundIndex(x, y);
-    if (tile === TILES.TREE) return TILE_INDEX.TREE;
-    if (tile === TILES.BUSH) return TILE_INDEX.BUSH;
+    if (tile === TILES.TREE) return this.foliageIndex(x, y);
+    if (tile === TILES.BUSH) return TILE_INDEX.GRASS_BUSH;
     if (tile === TILES.CONCRETE) return TILE_INDEX.CONCRETE;
     return TILE_INDEX.BRIDGE;
+  }
+
+  // Border (impassable) cell -> mostly plain grass, with a sporadic tree/bush
+  // for texture. A well-mixed 2D hash of the tile coords (bit-avalanche, so x
+  // and y both scramble the low bits) keeps the scatter from lining up on rows
+  // or columns; deterministic so foliage is stable across renders/edits.
+  foliageIndex(x, y) {
+    let h = Math.imul(x ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(y ^ 0x27d4eb2f, 0xc2b2ae35);
+    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+    h ^= h >>> 13;
+    const r = (h >>> 0) % 100;
+    if (r < 12) return TILE_INDEX.GRASS_TREE; // ~12% trees
+    if (r < 20) return TILE_INDEX.GRASS_BUSH; // ~8% bushes
+    return TILE_INDEX.GRASS; // ~80% plain grass
   }
 
   // Stamp one cell's rendered tile + collision from base terrain + overpass.
@@ -289,8 +386,11 @@ export default class GameScene extends Phaser.Scene {
     this.driver = this.physics.add
       .image(px, py, this.isICap ? 'car-icap' : 'car-old')
       .setDepth(10);
-    // Body a touch smaller than the tile so the car threads gaps cleanly.
-    this.driver.body.setSize(TILE_SIZE * 0.7, TILE_SIZE * 0.7, true);
+    // Real car art (Kenney Racing Pack) is a tall top-down PNG; scale it to
+    // roughly one tile long and thread gaps with a snug body.
+    const carScale = (TILE_SIZE * 1.05) / this.driver.height;
+    this.driver.setScale(carScale);
+    this.driver.body.setSize(this.driver.width * 0.72, this.driver.height * 0.82, true);
     this.driver.setCollideWorldBounds(true);
 
     this.physics.world.setBounds(0, 0, MAP_W * TILE_SIZE, MAP_H * TILE_SIZE);
@@ -522,6 +622,8 @@ export default class GameScene extends Phaser.Scene {
     if (this.overpassActive) return;
     this.overpassActive = true;
     this.restampOverpass();
+    this.overpassCurbs.forEach((c) => c.setVisible(true)); // kerbs appear with the road
+    this.overpassUnderRounding.forEach((w) => w.setVisible(false)); // underneath rounding paved over
   }
 
   // Finish -> architecting (assembly). The clock stops when assembly completes,
@@ -565,8 +667,7 @@ export default class GameScene extends Phaser.Scene {
       h = (u + dn + 1) * TILE_SIZE;
     }
     const barrier = this.add
-      .rectangle(cxWorld, cyWorld, w, h, 0xf0a020)
-      .setStrokeStyle(3, 0x1a1a1a)
+      .tileSprite(cxWorld, cyWorld, w, h, KYC_STRIPE_KEY)
       .setDepth(4);
     this.physics.add.existing(barrier, true);
     const collider = this.physics.add.collider(this.driver, barrier);
