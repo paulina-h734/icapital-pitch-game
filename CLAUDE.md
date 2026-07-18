@@ -2,6 +2,10 @@
 
 > Source of truth for the project. Read fully before acting.
 > Written across separate planning sessions; treat this as authoritative.
+>
+> **This file is the product intent (what/why).** For the technical *how* —
+> architecture, run/build/test, the map editor, and the hand‑tuned decisions not
+> to revert — read [`HANDOFF.md`](HANDOFF.md).
 
 ## What this is
 A short, playable browser game — the centerpiece of a 15-minute intern pitch selling iCapital
