@@ -27,7 +27,8 @@ import { runDebrisAltTask } from '../tasks/debrisAlt.js';
 import { runDisguiseAltTask } from '../tasks/disguiseAlt.js';
 import { runKycGate } from '../tasks/kycGate.js';
 import { runOverpassButton } from '../tasks/overpassButton.js';
-import { runAssembly } from '../tasks/assembly.js';
+import { runArchitect } from '../tasks/architect.js';
+import { runReport } from '../tasks/report.js';
 import { recordBestTime } from '../bestTimes.js';
 
 // Proximity (in tiles) at which driving into an alt/button/finish triggers it.
@@ -104,13 +105,12 @@ export default class GameScene extends Phaser.Scene {
     this.interacting = false;
     this.collected = new Set();
     this.inventory = [];
-    // The clock doesn't run until the driver actually takes off — the timer
-    // shows 0:00.0 and only starts on the first movement input (set in
-    // startRun, from handleMovement). Keeps the two-car contrast honest: no
-    // reaction/orientation time counted, only driving + tasks.
+    // The run clock spans the Architect stage + the drive: it starts as the
+    // Architect overlay opens (below) and stops at the finish line, so BOTH the
+    // manual architect and the manual driving feed the rusty-vs-iCap gap.
     this.runStartMs = this.time.now;
-    this.runStarted = false;
-    this.runActive = false;
+    this.runActive = true;
+    this.architecting = true; // pauses driving until the allocation is set
 
     // Client identity for KYC — set by the opening sequence; defaults keep the
     // gate playable if GameScene is launched standalone (dev).
@@ -124,8 +124,23 @@ export default class GameScene extends Phaser.Scene {
     this.finished = false;
     this.setupGates();
 
-    // Parallel HUD/prompt scene (crisp screen-space UI at zoom 1).
-    if (!this.scene.isActive('UI')) this.scene.launch('UI');
+    // Parallel HUD/prompt scene (crisp screen-space UI at zoom 1). Once it's
+    // ready, open the Architect stage (build the allocation before driving).
+    const startArchitect = () => {
+      runArchitect(
+        this,
+        this.scene.get('UI'),
+        { isICap: this.isICap, clientName: this.registry.get('clientName') },
+        () => {
+          this.architecting = false;
+        },
+      );
+    };
+    if (this.scene.isActive('UI')) startArchitect();
+    else {
+      this.scene.launch('UI');
+      this.scene.get('UI').events.once(Phaser.Scenes.Events.CREATE, startArchitect);
+    }
 
     // Debug map editor — dev-only so it never ships in the pitch build.
     if (DEV) {
@@ -499,15 +514,14 @@ export default class GameScene extends Phaser.Scene {
   }
 
   update() {
-    // The clock keeps running through everything (manual tasks cost time) —
-    // update it before the early-outs. Before the run starts it sits at 0:00.0.
+    // The clock runs from the Architect stage through the finish — tick it
+    // before the early-outs so the architect and manual tasks all cost time.
     if (this.runActive) this.scene.get('UI').setTimer(this.elapsed());
-    else if (!this.runStarted) this.scene.get('UI').setTimer(0);
     if (this.editing) {
       this.editor?.update();
       return;
     }
-    if (this.overview || this.interacting) return;
+    if (this.architecting || this.overview || this.interacting) return;
     this.handleMovement();
     this.updateCamera();
     this.checkTriggers();
@@ -626,20 +640,23 @@ export default class GameScene extends Phaser.Scene {
     this.overpassUnderRounding.forEach((w) => w.setVisible(false)); // underneath rounding paved over
   }
 
-  // Finish -> architecting (assembly). The clock stops when assembly completes,
-  // NOT at the finish line.
+  // Finish line. The clock (running since the Architect stage) stops here; then
+  // the results / best-times board.
   startFinish() {
     this.interacting = true;
     this.finished = true;
+    this.runActive = false;
     this.driver.body.setVelocity(0, 0);
+    const ms = this.elapsed();
     const ui = this.scene.get('UI');
-    runAssembly(this, ui, { isICap: this.isICap, inventory: this.inventory }, () => {
-      const ms = this.elapsed();
-      this.runActive = false;
-      ui.setTimer(ms); // freeze on the final time
-      const best = recordBestTime(this.isICap, ms);
-      ui.showResults({ ms, isICap: this.isICap, best }, () => window.location.reload());
-    });
+    ui.setTimer(ms); // freeze on the final time
+    const best = recordBestTime(this.isICap, ms);
+    runReport(
+      this,
+      ui,
+      { isICap: this.isICap, clientName: this.registry.get('clientName'), ms, best },
+      () => window.location.reload(),
+    );
   }
 
   // Build a barrier bar across the corridor at each gate POI.
@@ -770,18 +787,10 @@ export default class GameScene extends Phaser.Scene {
 
     const v = new Phaser.Math.Vector2(vx, vy);
     if (v.lengthSq() > 0) {
-      if (!this.runStarted) this.startRun(); // first move starts the clock
       v.normalize().scale(CAR_SPEED * this.speedMultiplier());
       this.orient(vx, vy);
     }
     this.driver.body.setVelocity(v.x, v.y);
-  }
-
-  // The run clock starts the instant the driver first moves.
-  startRun() {
-    this.runStarted = true;
-    this.runActive = true;
-    this.runStartMs = this.time.now;
   }
 
   // Boosted only while the iCapCar is driving on a materialised concrete tile.

@@ -50,69 +50,8 @@ export default class UIScene extends Phaser.Scene {
     this.timerText.setVisible(false);
   }
 
-  // Final results overlay: this run's time + the persistent best-times table.
-  showResults({ ms, isICap, best }, onAgain) {
-    const { W, H } = this;
-    const els = [];
-    const add = (o) => {
-      els.push(o.setDepth(60));
-      return o;
-    };
-    add(this.add.rectangle(0, 0, W, H, 0x0b1020, 0.9).setOrigin(0));
-    add(
-      this.add
-        .text(W / 2, H * 0.16, 'Run complete', {
-          fontFamily: 'sans-serif',
-          fontSize: '30px',
-          color: '#eef3ff',
-        })
-        .setOrigin(0.5)
-        .setResolution(2),
-    );
-    add(
-      this.add
-        .text(W / 2, H * 0.3, `${isICap ? 'iCapCar' : 'Rusty car'}  ·  ${formatTime(ms)}`, {
-          fontFamily: 'monospace',
-          fontSize: '40px',
-          color: isICap ? '#7db4ff' : '#f0a08a',
-        })
-        .setOrigin(0.5)
-        .setResolution(2),
-    );
-    // best-times table
-    add(
-      this.add
-        .text(W / 2, H * 0.46, 'BEST TIMES', { fontFamily: 'sans-serif', fontSize: '16px', color: '#9fb0d0' })
-        .setOrigin(0.5)
-        .setResolution(2),
-    );
-    const row = (y, label, val, color) => {
-      add(this.add.text(W / 2 - 90, y, label, { fontFamily: 'sans-serif', fontSize: '20px', color }).setOrigin(0, 0.5).setResolution(2));
-      add(this.add.text(W / 2 + 110, y, formatTime(val), { fontFamily: 'monospace', fontSize: '20px', color }).setOrigin(1, 0.5).setResolution(2));
-    };
-    row(H * 0.53, 'RUSTY CAR', best.old, '#f0a08a');
-    row(H * 0.59, 'iCAPCAR', best.icap, '#7db4ff');
-    add(
-      this.add
-        .text(W / 2, H * 0.72, 'Press Enter to run again', {
-          fontFamily: 'sans-serif',
-          fontSize: '16px',
-          color: '#9fe0b0',
-        })
-        .setOrigin(0.5)
-        .setResolution(2),
-    );
-
-    const onKey = (e) => {
-      if (e.key !== 'Enter') return;
-      this.input.keyboard.off('keydown', onKey);
-      els.forEach((o) => o.destroy());
-      onAgain();
-    };
-    // Attach a beat later so the Enter that finished assembly doesn't
-    // immediately dismiss this screen.
-    this.time.delayedCall(400, () => this.input.keyboard.on('keydown', onKey));
-  }
+  // The finish payoff (consolidated report + best-times) now lives in
+  // src/tasks/report.js (runReport), drawn on this scene's screen-space canvas.
 
   // --- inventory HUD ---------------------------------------------------------
 
