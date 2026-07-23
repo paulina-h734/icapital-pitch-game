@@ -120,7 +120,53 @@ export default class OpeningScene extends Phaser.Scene {
       : 'You have unlocked the old map (very crumpled). You are on your own out there.';
     this.label(this.W / 2, this.H * 0.38, title, 28, this.isICap ? '#7db4ff' : '#f0a08a');
     this.label(this.W / 2, this.H * 0.5, body, 20, '#eef3ff', { wordWrap: { width: 620 }, align: 'center' });
-    this.label(this.W / 2, this.H * 0.68, 'Press Enter to drive', 16, '#9fe0b0');
+    this.label(
+      this.W / 2,
+      this.H * 0.68,
+      this.isICap ? 'Press Enter to continue' : 'Press Enter to drive',
+      16,
+      '#9fe0b0',
+    );
+  }
+
+  // iCap-only route briefing — the platform maps the whole trip up front (the
+  // rusty car gets no such preview). Runs before the game, so it's not timed.
+  showBriefing() {
+    this.clearScreen();
+    this.state = 'brief';
+    this.label(this.W / 2, this.H * 0.12, 'iGPS · your route', 30, '#7db4ff');
+    this.label(
+      this.W / 2,
+      this.H * 0.19,
+      "The iCapital platform maps the whole journey — here's what's ahead:",
+      17,
+      '#9fb0d0',
+    );
+    const stops = [
+      ['Architect', "set the client's target allocation"],
+      ['Research & diligence', 'collect 3 vetted alternatives'],
+      ['KYC customs', 'identity verified automatically'],
+      ['Document Center', 'the overpass carries you over the paperwork'],
+      ['Consolidated reporting', 'one clean view at the finish'],
+    ];
+    const x = this.W * 0.24;
+    stops.forEach(([stop, desc], i) => {
+      const y = this.H * 0.32 + i * this.H * 0.1;
+      const num = this.add
+        .text(x, y, `${i + 1}`, { fontFamily: 'sans-serif', fontSize: '20px', color: '#7db4ff' })
+        .setOrigin(0.5)
+        .setResolution(2);
+      const t = this.add
+        .text(x + 34, y, `${stop} — ${desc}`, {
+          fontFamily: 'sans-serif',
+          fontSize: '20px',
+          color: '#eef3ff',
+        })
+        .setOrigin(0, 0.5)
+        .setResolution(2);
+      this.els.push(num, t);
+    });
+    this.label(this.W / 2, this.H * 0.88, 'Press Enter to begin', 16, '#9fe0b0');
   }
 
   begin() {
@@ -140,6 +186,13 @@ export default class OpeningScene extends Phaser.Scene {
       return;
     }
     if (this.state === 'unlock') {
+      if (e.key === 'Enter') {
+        if (this.isICap) this.showBriefing(); // iCap gets the route briefing first
+        else this.begin();
+      }
+      return;
+    }
+    if (this.state === 'brief') {
       if (e.key === 'Enter') this.begin();
       return;
     }

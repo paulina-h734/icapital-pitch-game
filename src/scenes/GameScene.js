@@ -39,6 +39,13 @@ const ALT_TASKS = {
   'alt-debris': runDebrisAltTask,
   'alt-disguise': runDisguiseAltTask,
 };
+// Alternative each map POI represents — shown in the iCapCar's drive-through
+// pickup toast ("Private Equity acquired!"). Maps 1:1 to the architect's slices.
+const ALT_NAMES = {
+  'alt-debris': 'Private Equity',
+  'alt-disguise': 'Private Credit',
+  'alt-caged': 'Real Assets',
+};
 
 // KYC customs gates: a barrier across the road that opens once verified.
 // KYC 1 also requires all alts collected first; KYC 2 is just re-verification.
@@ -541,12 +548,19 @@ export default class GameScene extends Phaser.Scene {
   }
 
   checkTriggers() {
-    // Alts: one-shot on proximity; deactivate once collected.
+    // Alts: one-shot on proximity; deactivate once collected. The iCapCar
+    // acquires them just by driving through — no pause, a little toast — while
+    // the rusty car has to stop and do the manual diligence task.
     for (const poi of this.pois) {
       const task = ALT_TASKS[poi.type];
       if (!task || this.collected.has(poi.type)) continue;
       if (this.near(poi, TRIGGER_RADIUS)) {
-        this.startTask(poi, task);
+        if (this.isICap) {
+          this.finishTask(poi);
+          this.showGateBubble(poi, `${ALT_NAMES[poi.type]} acquired!`);
+        } else {
+          this.startTask(poi, task);
+        }
         return;
       }
     }
@@ -563,14 +577,23 @@ export default class GameScene extends Phaser.Scene {
       }
       if (!nowIn && wasIn) this.inRange.delete(poi.type);
     }
-    // Overpass button: re-pressable, rising-edge.
+    // Overpass button, rising-edge. iCapCar is recognised on arrival and the
+    // overpass materialises without stopping; the rusty car gets the "button
+    // seems broken" prompt.
     const button = this.poiByType('overpass');
     if (button) {
       const nowIn = this.near(button, TRIGGER_RADIUS);
       const wasIn = this.inRange.has('overpass');
       if (nowIn && !wasIn) {
         this.inRange.add('overpass');
-        this.startOverpass(button);
+        if (this.isICap) {
+          if (!this.overpassActive) {
+            this.activateOverpass();
+            this.showGateBubble(button, 'iCapCar recognized — overpass up!');
+          }
+        } else {
+          this.startOverpass(button);
+        }
         return;
       }
       if (!nowIn && wasIn) this.inRange.delete('overpass');
