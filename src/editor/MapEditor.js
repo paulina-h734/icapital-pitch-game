@@ -20,11 +20,14 @@ const EDIT_ZOOM = RENDER_SCALE * 0.55;
 const PAN_SPEED = 16; // world px / frame
 
 const BRUSHES = [
-  { label: 'Ground', val: TILES.GROUND },
-  { label: 'Tree', val: TILES.TREE },
-  { label: 'Bush', val: TILES.BUSH },
-  { label: 'Concrete', val: TILES.CONCRETE },
-  { label: 'Bridge', val: TILES.BRIDGE },
+  { id: 'ground', label: 'Ground', val: TILES.GROUND },
+  { id: 'tree', label: 'Tree', val: TILES.TREE },
+  { id: 'bush', label: 'Bush', val: TILES.BUSH },
+  { id: 'concrete', label: 'Concrete', val: TILES.CONCRETE },
+  { id: 'bridge', label: 'Bridge', val: TILES.BRIDGE },
+  { id: 'erase-op', label: 'Erase OP', clearOp: true }, // remove overpass overlay
+  { id: 'shade', label: 'Shade', shade: 1 }, // paint the screen-dim zone
+  { id: 'unshade', label: 'Unshade', shade: 0 },
 ];
 
 const POI_BUTTONS = [
@@ -36,6 +39,8 @@ const POI_BUTTONS = [
   { key: 'kyc2', label: 'KYC 2' },
   { key: 'overpass', label: 'Overpass' },
   { key: 'finish', label: 'Finish' },
+  { key: 'sign-subscription', label: 'Sub. sign' },
+  { key: 'sign-express', label: 'Exp. sign' },
 ];
 
 export default class MapEditor {
@@ -43,9 +48,10 @@ export default class MapEditor {
     this.scene = scene;
     this.active = false;
     this.tool = 'terrain'; // 'terrain' | 'poi'
-    this.brush = TILES.GROUND;
+    this.brush = BRUSHES[0];
     this.selectedPoi = 'start';
     this.painting = false;
+    this.overpassHidden = false;
     this.buttons = [];
 
     this.onDown = this.onDown.bind(this);
@@ -64,6 +70,9 @@ export default class MapEditor {
   enter() {
     this.active = true;
     this.scene.setEditing(true);
+    // setEditing shows the overpass; keep the toggle button in sync.
+    this.overpassHidden = false;
+    if (this.overpassBtn) this.overpassBtn.textContent = 'Overpass: shown';
 
     const cam = this.scene.cameras.main;
     cam.setZoom(EDIT_ZOOM);
@@ -129,12 +138,18 @@ export default class MapEditor {
     };
   }
 
+  paintAt(x, y) {
+    if (this.brush.shade !== undefined) this.scene.paintShade(x, y, this.brush.shade);
+    else if (this.brush.clearOp) this.scene.clearOverpassCell(x, y);
+    else this.scene.paintTile(x, y, this.brush.val);
+  }
+
   onDown(pointer) {
     const { x, y } = this.tileAt(pointer);
     if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return;
     if (this.tool === 'terrain') {
       this.painting = true;
-      this.scene.paintTile(x, y, this.brush);
+      this.paintAt(x, y);
     } else {
       this.scene.movePoi(this.selectedPoi, x, y);
       this.scene.persist();
@@ -144,7 +159,7 @@ export default class MapEditor {
   onMove(pointer) {
     if (!this.painting || this.tool !== 'terrain') return;
     const { x, y } = this.tileAt(pointer);
-    this.scene.paintTile(x, y, this.brush);
+    this.paintAt(x, y);
   }
 
   onUp() {
@@ -172,11 +187,14 @@ export default class MapEditor {
 
     hud.appendChild(this.row('MAP EDITOR', true));
     hud.appendChild(this.group('Brush', BRUSHES.map((b) =>
-      this.button(b.label, () => this.setBrush(b.val), { kind: 'brush', id: b.val }),
+      this.button(b.label, () => this.setBrush(b), { kind: 'brush', id: b.id }),
     )));
     hud.appendChild(this.group('Place POI', POI_BUTTONS.map((p) =>
       this.button(p.label, () => this.setPoi(p.key), { kind: 'poi', id: p.key }),
     )));
+    this.overpassBtn = this.button('Overpass: shown', () => this.toggleOverpassView());
+    hud.appendChild(this.group('View', [this.overpassBtn]));
+
     hud.appendChild(this.group('Actions', [
       this.button('Save', () => this.scene.persist()),
       this.button('Export', () => this.doExport()),
@@ -239,7 +257,7 @@ export default class MapEditor {
       const active =
         (b.dataset.kind === 'brush' &&
           this.tool === 'terrain' &&
-          String(this.brush) === b.dataset.id) ||
+          this.brush.id === b.dataset.id) ||
         (b.dataset.kind === 'poi' &&
           this.tool === 'poi' &&
           this.selectedPoi === b.dataset.id);
@@ -248,9 +266,9 @@ export default class MapEditor {
     });
   }
 
-  setBrush(val) {
+  setBrush(brush) {
     this.tool = 'terrain';
-    this.brush = val;
+    this.brush = brush;
     this.refreshButtons();
   }
 
@@ -258,6 +276,12 @@ export default class MapEditor {
     this.tool = 'poi';
     this.selectedPoi = key;
     this.refreshButtons();
+  }
+
+  toggleOverpassView() {
+    this.overpassHidden = !this.overpassHidden;
+    this.scene.setOverpassHidden(this.overpassHidden);
+    this.overpassBtn.textContent = this.overpassHidden ? 'Overpass: hidden' : 'Overpass: shown';
   }
 
   doExport() {

@@ -15,6 +15,8 @@ export const TILES = {
   BUSH: 2, // impassable soft edge
   CONCRETE: 3, // overpass road — walkable only once the overpass materialises
   BRIDGE: 4, // overpass border/railing — always impassable
+  DARK_GROUND: 5, // walkable dirt, darkened (paint the forest floor shadowy)
+  DARK_TREE: 6, // impassable tree, darkened (paint a deeper, dimmer forest)
 };
 
 export const MAP_W = data.w;
@@ -33,11 +35,18 @@ export function defaultOverpass() {
   return rows.map((row) => row.split('').map((c) => Number(c)));
 }
 
+// Shade mask (0/1): 1 = a "dark zone" cell — driving over it dims the screen.
+// A separate overlay from the terrain, painted in the editor.
+export function defaultShade() {
+  const rows = data.shade || data.tiles.map((row) => '0'.repeat(row.length));
+  return rows.map((row) => row.split('').map((c) => Number(c)));
+}
+
 export function defaultPois() {
   return data.pois.map((p) => ({ ...p }));
 }
 
-// Only open ground is walkable; trees and bushes block (green = impassable).
+// Only open ground (light or dark) is walkable; trees/bushes block.
 export function isBlocked(tile) {
-  return tile !== TILES.GROUND;
+  return tile !== TILES.GROUND && tile !== TILES.DARK_GROUND;
 }

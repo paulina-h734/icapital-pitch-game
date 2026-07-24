@@ -34,6 +34,15 @@ export function recordBestTime(isICap, ms) {
   return best;
 }
 
+// Wipe the persistent best times (used by "Return home" at the finish).
+export function resetBestTimes() {
+  try {
+    localStorage.removeItem(KEY);
+  } catch (e) {
+    // ignore
+  }
+}
+
 // ms -> "M:SS.d"
 export function formatTime(ms) {
   if (ms == null) return '—';

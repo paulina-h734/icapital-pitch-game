@@ -19,6 +19,8 @@ import {
   KYC_STRIPE_KEY,
   GRASS_CORNER_KEY,
   DIRT_CORNER_KEY,
+  GRASS_CORNER_DARK_KEY,
+  DIRT_CORNER_DARK_KEY,
   CURB_KEY,
   ASSETS,
 } from '../gfx/placeholders.js';
@@ -93,7 +95,9 @@ export default class GameScene extends Phaser.Scene {
     const map = loadMap();
     this.tiles = map.tiles; // base terrain (ground/tree/bush)
     this.overpass = map.overpass; // overlay (0 / CONCRETE / BRIDGE), on top of terrain
+    this.shade = map.shade; // mask (0/1): driving over a 1 dims the screen
     this.pois = map.pois;
+    this.darknessLevel = 0; // current screen-dim amount (eased toward the target)
 
     // Car + client identity are chosen in the opening sequence (OpeningScene).
     this.isICap = !!this.registry.get('isICap');
@@ -102,7 +106,7 @@ export default class GameScene extends Phaser.Scene {
     this.addBorderRounding();
     this.addOverpassCurbs();
     this.drawPois();
-    this.drawForestSign();
+    this.drawShadeOverlays();
     this.createDriver();
     this.setupCamera();
     this.setupInput();
@@ -110,6 +114,7 @@ export default class GameScene extends Phaser.Scene {
     this.facing = 'up';
     this.overview = false;
     this.editing = false;
+    this.hideOverpass = false; // editor: hide the overpass overlay to edit beneath
 
     // Task / collection state.
     this.overpassActive = false;
@@ -173,8 +178,12 @@ export default class GameScene extends Phaser.Scene {
     });
     const tileset = this.map.addTilesetImage(TILESET_KEY, TILESET_KEY, TILE_SIZE, TILE_SIZE);
     this.layer = this.map.createLayer(0, tileset, 0, 0).setDepth(0);
-    // Trees and bushes collide; ground is walkable.
-    this.layer.setCollisionByExclusion([TILE_INDEX.GROUND, TILE_INDEX.GROUND_ALT]);
+    // Trees and bushes collide; ground (light or dark) is walkable.
+    this.layer.setCollisionByExclusion([
+      TILE_INDEX.GROUND,
+      TILE_INDEX.GROUND_ALT,
+      TILE_INDEX.DARK_GROUND,
+    ]);
     // The overpass (concrete + bridge) is invisible & passable in play until it
     // materialises — render it as floor for now (visible again in the editor).
     this.restampOverpass();
@@ -198,28 +207,48 @@ export default class GameScene extends Phaser.Scene {
     // hidden once the overpass materialises (activateOverpass) so they don't sit
     // on the concrete. Wedges off the overpass are permanent.
     this.overpassUnderRounding = [];
-    const blocked = (x, y) =>
-      x < 0 || y < 0 || x >= MAP_W || y >= MAP_H || this.tiles[y][x] !== TILES.GROUND;
-    const open = (x, y) => !blocked(x, y);
+    const inb = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H;
+    const tileAt = (x, y) => (inb(x, y) ? this.tiles[y][x] : TILES.TREE); // OOB = light wall
+    const isGround = (t) => t === TILES.GROUND || t === TILES.DARK_GROUND;
+    const open = (x, y) => isGround(tileAt(x, y));
+    const blocked = (x, y) => !open(x, y);
+    const isDarkTree = (x, y) => tileAt(x, y) === TILES.DARK_TREE;
+    const isDarkGround = (x, y) => tileAt(x, y) === TILES.DARK_GROUND;
     const place = (key, x, y, angle) => {
       const { px, py } = this.tileToWorld(x, y);
       const img = this.add.image(px, py, key).setDepth(1).setAngle(angle);
       if (this.overpass[y][x]) this.overpassUnderRounding.push(img);
     };
+    // Convex wedge on a walkable cell; shade from the two WALL neighbours. All
+    // trees count as one block, but a dark tree and a light tree are never rounded
+    // together (mixed corner -> skip), so the two forests keep clean edges.
+    const convex = (x, y, angle, ax, ay, bx, by) => {
+      const da = isDarkTree(ax, ay);
+      const db = isDarkTree(bx, by);
+      if (da && db) place(GRASS_CORNER_DARK_KEY, x, y, angle);
+      else if (!da && !db) place(GRASS_CORNER_KEY, x, y, angle);
+    };
+    // Concave wedge on a wall cell; shade from the two GROUND neighbours.
+    const concave = (x, y, angle, ax, ay, bx, by) => {
+      const da = isDarkGround(ax, ay);
+      const db = isDarkGround(bx, by);
+      if (da && db) place(DIRT_CORNER_DARK_KEY, x, y, angle);
+      else if (!da && !db) place(DIRT_CORNER_KEY, x, y, angle);
+    };
     for (let y = 0; y < MAP_H; y += 1) {
       for (let x = 0; x < MAP_W; x += 1) {
         if (open(x, y)) {
           // outer/convex — grass wedge on the walkable corner
-          if (blocked(x, y - 1) && blocked(x + 1, y)) place(GRASS_CORNER_KEY, x, y, 0);
-          if (blocked(x + 1, y) && blocked(x, y + 1)) place(GRASS_CORNER_KEY, x, y, 90);
-          if (blocked(x, y + 1) && blocked(x - 1, y)) place(GRASS_CORNER_KEY, x, y, 180);
-          if (blocked(x - 1, y) && blocked(x, y - 1)) place(GRASS_CORNER_KEY, x, y, 270);
+          if (blocked(x, y - 1) && blocked(x + 1, y)) convex(x, y, 0, x, y - 1, x + 1, y);
+          if (blocked(x + 1, y) && blocked(x, y + 1)) convex(x, y, 90, x + 1, y, x, y + 1);
+          if (blocked(x, y + 1) && blocked(x - 1, y)) convex(x, y, 180, x, y + 1, x - 1, y);
+          if (blocked(x - 1, y) && blocked(x, y - 1)) convex(x, y, 270, x - 1, y, x, y - 1);
         } else {
           // inner/concave — dirt wedge on the grass corner poking into the road
-          if (open(x, y - 1) && open(x + 1, y)) place(DIRT_CORNER_KEY, x, y, 0);
-          if (open(x + 1, y) && open(x, y + 1)) place(DIRT_CORNER_KEY, x, y, 90);
-          if (open(x, y + 1) && open(x - 1, y)) place(DIRT_CORNER_KEY, x, y, 180);
-          if (open(x - 1, y) && open(x, y - 1)) place(DIRT_CORNER_KEY, x, y, 270);
+          if (open(x, y - 1) && open(x + 1, y)) concave(x, y, 0, x, y - 1, x + 1, y);
+          if (open(x + 1, y) && open(x, y + 1)) concave(x, y, 90, x + 1, y, x, y + 1);
+          if (open(x, y + 1) && open(x - 1, y)) concave(x, y, 180, x, y + 1, x - 1, y);
+          if (open(x - 1, y) && open(x, y - 1)) concave(x, y, 270, x - 1, y, x, y - 1);
         }
       }
     }
@@ -262,6 +291,8 @@ export default class GameScene extends Phaser.Scene {
     if (tile === TILES.TREE) return this.foliageIndex(x, y);
     if (tile === TILES.BUSH) return TILE_INDEX.GRASS_BUSH;
     if (tile === TILES.CONCRETE) return TILE_INDEX.CONCRETE;
+    if (tile === TILES.DARK_GROUND) return TILE_INDEX.DARK_GROUND;
+    if (tile === TILES.DARK_TREE) return this.foliageIndexDark(x, y);
     return TILE_INDEX.BRIDGE;
   }
 
@@ -279,6 +310,18 @@ export default class GameScene extends Phaser.Scene {
     return TILE_INDEX.GRASS; // ~80% plain grass
   }
 
+  // Same scatter as foliageIndex, but the dark-forest variants — so painted dark
+  // trees get the same sporadic tree/bush texture as the light green border.
+  foliageIndexDark(x, y) {
+    let h = Math.imul(x ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(y ^ 0x27d4eb2f, 0xc2b2ae35);
+    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+    h ^= h >>> 13;
+    const r = (h >>> 0) % 100;
+    if (r < 12) return TILE_INDEX.DARK_GRASS_TREE;
+    if (r < 20) return TILE_INDEX.DARK_GRASS_BUSH;
+    return TILE_INDEX.DARK_GRASS;
+  }
+
   // Stamp one cell's rendered tile + collision from base terrain + overpass.
   //   • overpass hidden (play, not materialised) -> the base terrain shows &
   //     collides exactly as if the overpass weren't there.
@@ -287,7 +330,10 @@ export default class GameScene extends Phaser.Scene {
   stampCell(x, y) {
     const op = this.overpass[y][x];
     const base = this.tiles[y][x];
-    const show = op && (this.editing || this.overpassActive);
+    // In the editor the overpass overlay is shown so it can be edited, unless the
+    // player toggles it off to see/paint the terrain underneath. In play it stays
+    // hidden until it materialises.
+    const show = op && ((this.editing && !this.hideOverpass) || this.overpassActive);
     let idx;
     let collide;
     if (show) {
@@ -295,7 +341,7 @@ export default class GameScene extends Phaser.Scene {
       collide = this.overpassActive && op === TILES.BRIDGE;
     } else {
       idx = this.tileIndex(x, y, base);
-      collide = base !== TILES.GROUND;
+      collide = base !== TILES.GROUND && base !== TILES.DARK_GROUND;
     }
     const tile = this.map.putTileAt(idx, x, y, false, this.layer);
     if (tile) tile.setCollision(collide);
@@ -309,19 +355,29 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  // Live edit. Concrete/Bridge brushes paint the OVERPASS overlay (terrain
-  // underneath is preserved); the other brushes paint the base terrain and
-  // clear any overpass there.
+  // Live edit. Concrete/Bridge brushes paint the OVERPASS overlay; the other
+  // brushes paint the BASE terrain. The two layers are independent — painting
+  // terrain no longer erases the overpass, so you can edit what's underneath it
+  // (toggle the overpass off to see it). Use the "Erase OP" brush to remove
+  // overpass cells.
   paintTile(x, y, value) {
     if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return false;
     if (value === TILES.CONCRETE || value === TILES.BRIDGE) {
       if (this.overpass[y][x] === value) return false;
       this.overpass[y][x] = value;
     } else {
-      if (this.tiles[y][x] === value && !this.overpass[y][x]) return false;
+      if (this.tiles[y][x] === value) return false;
       this.tiles[y][x] = value;
-      this.overpass[y][x] = 0;
     }
+    this.stampCell(x, y);
+    return true;
+  }
+
+  // Editor: clear the overpass overlay at a cell ("Erase OP" brush).
+  clearOverpassCell(x, y) {
+    if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return false;
+    if (!this.overpass[y][x]) return false;
+    this.overpass[y][x] = 0;
     this.stampCell(x, y);
     return true;
   }
@@ -351,8 +407,28 @@ export default class GameScene extends Phaser.Scene {
         marker = this.add.rectangle(px, py, TILE_SIZE * 0.9, TILE_SIZE * 0.6, POI_COLORS.kyc);
         break;
       case 'finish':
-        marker = this.add.image(px, py, 'finish-target').setDisplaySize(TILE_SIZE * 1.7, TILE_SIZE * 1.7);
+        // Checkered flag on a pole; raised so the pole base sits on the tile.
+        marker = this.add
+          .image(px, py - TILE_SIZE * 0.45, 'finish-flag')
+          .setDisplaySize(TILE_SIZE * 1.9, TILE_SIZE * 1.9);
         break;
+      case 'sign-express':
+      case 'sign-subscription': {
+        // Route etchings in the dirt — editor-placeable so they can be nudged
+        // to line up with the junction. Text is the marker; arrow goes in parts.
+        const isExp = p.type === 'sign-express';
+        marker = this.add
+          .text(px, py, isExp ? 'EXPRESS\nROUTE' : 'SUBSCRIPTION\nROUTE', {
+            fontFamily: FONT_TITLE,
+            fontSize: '14px',
+            color: '#5a3a1e',
+            align: 'center',
+            lineSpacing: 1,
+          })
+          .setOrigin(0.5)
+          .setResolution(RENDER_SCALE);
+        break;
+      }
       case 'overpass':
         // Bigger, raised a little above its tile so it reads as a button.
         marker = this.add
@@ -364,15 +440,28 @@ export default class GameScene extends Phaser.Scene {
         marker = this.add.rectangle(px, py, TILE_SIZE * 0.6, TILE_SIZE * 0.6, POI_COLORS.start);
         break;
     }
-    marker.setDepth(5);
+    const isSign = p.type === 'sign-express' || p.type === 'sign-subscription';
+    marker.setDepth(isSign ? 1 : 5);
+    if (isSign) marker.setAlpha(0.5); // etched into the dirt
     if (marker.setStrokeStyle) marker.setStrokeStyle(2, 0x1a1a1a); // shapes only, not the icon images
     // KYC checkpoints are drawn as the sliding gate (createBarrier); the start
     // never needs a marker (you never return). Hide both.
     if (p.type === 'kyc1' || p.type === 'kyc2' || p.type === 'start') marker.setVisible(false);
 
+    // Route signs get a directional arrow etched beside the text (express points
+    // right toward the overpass; subscription points left into the forest maze).
+    const parts = [];
+    if (isSign) {
+      const dir = p.type === 'sign-express' ? 1 : -1;
+      const arrow = this.add
+        .triangle(px + dir * 62, py, 0, -11, 0, 11, dir * 20, 0, 0x5a3a1e)
+        .setAlpha(0.5)
+        .setDepth(1);
+      parts.push(arrow);
+    }
+
     // The disguise alt wears its disguise on the map: a little hat + moustache
     // that fade away once the asset has been inspected & collected.
-    const parts = [];
     if (p.type === 'alt-disguise') {
       const iz = TILE_SIZE * 1.5; // matches the asset icon marker
       const hat = this.add
@@ -402,40 +491,6 @@ export default class GameScene extends Phaser.Scene {
     this.poiObjects[p.type] = { marker, label, parts };
   }
 
-  // Etch signs into the dirt at the three-way junction: DOCUMENT CENTER in the
-  // middle, "subscription route" (the forest maze) to the left, "express route"
-  // (the overpass) to the right. Dark brown, low on the ground.
-  drawForestSign() {
-    const BROWN = 0x5a3a1e;
-    const label = (tx, ty, text) =>
-      this.add
-        .text(tx, ty, text, {
-          fontFamily: FONT_TITLE,
-          fontSize: '14px',
-          color: '#5a3a1e',
-          align: 'center',
-          lineSpacing: 1,
-        })
-        .setOrigin(0.5)
-        .setAlpha(0.5)
-        .setResolution(RENDER_SCALE)
-        .setDepth(1);
-    const arrow = (x, y, dir) =>
-      this.add
-        .triangle(x, y, 0, -11, 0, 11, dir * 20, 0, BROWN)
-        .setAlpha(0.5)
-        .setDepth(1);
-
-    const mid = this.tileToWorld(33, 63);
-    label(mid.px, mid.py, 'DOCUMENT\nCENTER');
-    const sub = this.tileToWorld(25, 61);
-    label(sub.px, sub.py, 'SUBSCRIPTION\nROUTE');
-    arrow(sub.px - 70, sub.py, -1);
-    const exp = this.tileToWorld(43, 63);
-    label(exp.px, exp.py, 'EXPRESS\nROUTE');
-    arrow(exp.px + 62, exp.py, 1);
-  }
-
   // Editor: move a POI to a new tile (updates data + marker + label).
   movePoi(type, x, y) {
     const poi = this.pois.find((p) => p.type === type);
@@ -446,10 +501,13 @@ export default class GameScene extends Phaser.Scene {
     const obj = this.poiObjects[type];
     obj.marker.setPosition(px, py);
     obj.label.setPosition(px, py - TILE_SIZE * 0.75);
-    if (obj.parts?.length) {
+    if (type === 'alt-disguise' && obj.parts.length >= 2) {
       const iz = TILE_SIZE * 1.5;
       obj.parts[0].setPosition(px, py - iz * 0.42);
       obj.parts[1].setPosition(px, py + iz * 0.14);
+    } else if ((type === 'sign-express' || type === 'sign-subscription') && obj.parts[0]) {
+      const dir = type === 'sign-express' ? 1 : -1;
+      obj.parts[0].setPosition(px + dir * 62, py);
     }
   }
 
@@ -583,6 +641,22 @@ export default class GameScene extends Phaser.Scene {
     this.handleMovement();
     this.updateCamera();
     this.checkTriggers();
+    this.updateDarkness();
+  }
+
+  // Dim the whole screen while the car is in a painted shade zone; ease in/out so
+  // crossing the boundary is a smooth fade rather than a snap.
+  updateDarkness() {
+    const tx = Math.floor(this.driver.x / TILE_SIZE);
+    const ty = Math.floor(this.driver.y / TILE_SIZE);
+    // On the materialised overpass you're above the murk — never shaded there.
+    const onOverpass =
+      this.overpassActive && this.overpass[ty] && this.overpass[ty][tx] === TILES.CONCRETE;
+    const inShade = !onOverpass && !!(this.shade[ty] && this.shade[ty][tx]);
+    const target = inShade ? 0.5 : 0;
+    this.darknessLevel += (target - this.darknessLevel) * 0.08;
+    if (this.darknessLevel < 0.003) this.darknessLevel = 0;
+    this.scene.get('UI').setDarkness(this.darknessLevel);
   }
 
   elapsed() {
@@ -734,11 +808,35 @@ export default class GameScene extends Phaser.Scene {
       .sort((a, b) => b - a); // bottom (nearest the car) first
     const STEP = 45;
     rowYs.forEach((ry, i) => {
-      this.time.delayedCall(i * STEP, () => rows[ry].forEach((x) => this.stampCell(x, ry)));
+      this.time.delayedCall(i * STEP, () => {
+        rows[ry].forEach((x) => this.stampCell(x, ry));
+        this.overpassBuildFlash(rows[ry], ry);
+      });
     });
     this.overpassCurbs.forEach((curb) => {
       const i = rowYs.indexOf(Math.floor(curb.y / TILE_SIZE));
       this.time.delayedCall(Math.max(0, i) * STEP + 20, () => curb.setVisible(true));
+    });
+  }
+
+  // A brief pale-blue flash over a row as its concrete lands — a light sweeps up
+  // the road as it materialises, then fades.
+  overpassBuildFlash(xs, ry) {
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const { px: pxL, py } = this.tileToWorld(minX, ry);
+    const { px: pxR } = this.tileToWorld(maxX, ry);
+    const w = (maxX - minX + 1) * TILE_SIZE;
+    const flash = this.add
+      .rectangle((pxL + pxR) / 2, py, w, TILE_SIZE, 0xbfe4ff, 0.8)
+      .setDepth(4);
+    this.tweens.add({
+      targets: flash,
+      alpha: 0,
+      scaleY: 1.7,
+      duration: 340,
+      ease: 'Quad.easeOut',
+      onComplete: () => flash.destroy(),
     });
   }
 
@@ -753,12 +851,16 @@ export default class GameScene extends Phaser.Scene {
     const ui = this.scene.get('UI');
     ui.setTimer(ms); // freeze on the final time
     const best = recordBestTime(this.isICap, ms);
-    runReport(
-      this,
-      ui,
-      { isICap: this.isICap, clientName: this.registry.get('clientName'), ms, best },
-      () => window.location.reload(),
-    );
+    const names = {
+      managerName: this.registry.get('managerName'),
+      clientName: this.registry.get('clientName'),
+      clientFood: this.registry.get('clientFood'),
+    };
+    runReport(this, ui, { isICap: this.isICap, clientName: names.clientName, ms, best }, () => {
+      // FINISH -> the results page, styled like the opening.
+      this.scene.stop('UI');
+      this.scene.start('Opening', { mode: 'results', best, names, isICap: this.isICap });
+    });
   }
 
   // Build a barrier bar across the corridor at each gate POI.
@@ -860,13 +962,19 @@ export default class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setResolution(RENDER_SCALE)
       .setDepth(31);
-    const w = label.width + 16;
-    const h = label.height + 10;
-    // A light-grey chip with a dark-grey border + a light top-left bevel.
-    const border = this.add.rectangle(px, by, w + 4, h + 4, 0x373737).setDepth(29);
-    const face = this.add.rectangle(px, by, w, h, 0xc6c6c6).setDepth(30);
-    const hi = this.add.rectangle(px, by - h / 2 + 1.5, w, 3, 0xefefef).setDepth(30);
-    const group = [border, face, hi, label];
+    const w = label.width + 22;
+    const h = label.height + 16;
+    const r = 7;
+    // Rounded light-grey chip matching the system-prompt/cover-screen style:
+    // dark outline, light highlight tucked under it, grey face.
+    const g = this.add.graphics().setDepth(30);
+    g.fillStyle(0x565656, 1);
+    g.fillRoundedRect(px - w / 2, by - h / 2, w, h, r);
+    g.fillStyle(0xeef0f2, 1);
+    g.fillRoundedRect(px - w / 2 + 2, by - h / 2 + 2, w - 4, h - 4, r - 1);
+    g.fillStyle(0xc6c6c6, 1);
+    g.fillRoundedRect(px - w / 2 + 2, by - h / 2 + 5, w - 4, h - 7, r - 1);
+    const group = [g, label];
     this.tweens.add({
       targets: group,
       y: '-=12',
@@ -894,10 +1002,19 @@ export default class GameScene extends Phaser.Scene {
 
   setEditing(on) {
     this.editing = on;
+    if (on) this.hideOverpass = false; // always start with the overpass visible
     if (on) this.driver.body.setVelocity(0, 0);
     this.driver.setVisible(!on);
     Object.values(this.poiObjects).forEach((o) => o.label.setVisible(on));
+    Object.values(this.shadeOverlays || {}).forEach((o) => o.setVisible(on)); // shade zone visible only in editor
     this.restampOverpass(); // show the overpass tiles while editing, hide in play
+  }
+
+  // Editor toggle: hide/show the overpass overlay so the terrain underneath can
+  // be seen and painted. Only meaningful while editing.
+  setOverpassHidden(hidden) {
+    this.hideOverpass = hidden;
+    this.restampOverpass();
   }
 
   respawnDriverAtStart() {
@@ -907,7 +1024,45 @@ export default class GameScene extends Phaser.Scene {
   }
 
   getMapData() {
-    return { tiles: this.tiles, overpass: this.overpass, pois: this.pois };
+    return { tiles: this.tiles, overpass: this.overpass, shade: this.shade, pois: this.pois };
+  }
+
+  // Editor-only visualisation of the shade mask: a translucent tint per shade
+  // cell, hidden during play (the actual dimming is the screen overlay).
+  drawShadeOverlays() {
+    this.shadeOverlays = {};
+    for (let y = 0; y < MAP_H; y += 1) {
+      for (let x = 0; x < MAP_W; x += 1) {
+        if (this.shade[y][x]) this.stampShadeCell(x, y);
+      }
+    }
+  }
+
+  // Editor: paint the shade mask (1 = dark zone, 0 = clear). Renders a live
+  // overlay for the cell so the painted zone is visible while editing.
+  paintShade(x, y, value) {
+    if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return false;
+    if (this.shade[y][x] === value) return false;
+    this.shade[y][x] = value;
+    this.stampShadeCell(x, y);
+    return true;
+  }
+
+  stampShadeCell(x, y) {
+    if (!this.shadeOverlays) this.shadeOverlays = {};
+    const key = `${x},${y}`;
+    if (this.shade[y][x]) {
+      if (!this.shadeOverlays[key]) {
+        const { px, py } = this.tileToWorld(x, y);
+        this.shadeOverlays[key] = this.add
+          .rectangle(px, py, TILE_SIZE, TILE_SIZE, 0x0a1020, 0.5)
+          .setDepth(4)
+          .setVisible(this.editing);
+      }
+    } else if (this.shadeOverlays[key]) {
+      this.shadeOverlays[key].destroy();
+      delete this.shadeOverlays[key];
+    }
   }
 
   persist() {

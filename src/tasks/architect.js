@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { FONT_TITLE, FONT_BODY } from '../config.js';
+import { drawPanel } from '../gfx/panel.js';
 
 // ---------------------------------------------------------------------------
 // Architect the allocation — runs at the START of a run (after car select,
@@ -165,22 +166,25 @@ export function runArchitect(scene, ui, opts, onComplete) {
 
   if (isICap) {
     prompt.setText('Press Build to construct the model allocation');
-    const btn = keep(
+    const btnPanel = keep(drawPanel(ui, cx, H * 0.8, 300, 62, 20).setDepth(62));
+    const btnText = label(cx, H * 0.8, 'Build with iCapital', 22, '#25344c', {
+      fontFamily: FONT_TITLE,
+    }).setDepth(63);
+    const hit = keep(
       ui.add
-        .rectangle(cx, H * 0.8, 300, 52, 0x2d6cdf)
-        .setStrokeStyle(2, 0x6f9ff0)
-        .setDepth(62)
+        .rectangle(cx, H * 0.8, 300, 62, 0x000000, 0)
+        .setDepth(63)
         .setInteractive({ useHandCursor: true }),
     );
-    const btnText = label(cx, H * 0.8, 'Build with iCapital', 20, '#ffffff');
-    btn.once('pointerdown', () => {
-      btn.disableInteractive();
+    hit.once('pointerdown', () => {
+      hit.disableInteractive();
       btnText.setText('Building…');
       const empties = segs.filter((s) => s.alt && !s.filled);
       empties.forEach((s, i) => scene.time.delayedCall(180 * (i + 1), () => fillSeg(s)));
       scene.time.delayedCall(180 * (empties.length + 1) + 60, () => {
-        btn.destroy();
+        btnPanel.destroy();
         btnText.destroy();
+        hit.destroy();
       });
     });
   } else {

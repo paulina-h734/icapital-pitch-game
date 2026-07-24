@@ -37,8 +37,12 @@ export const TILE_INDEX = {
   GRASS_BUSH: 4, // impassable border — grass + bush
   CONCRETE: 5, // overpass road
   BRIDGE: 6, // overpass border
+  DARK_GROUND: 7, // walkable dirt, darkened (editor forest floor)
+  DARK_GRASS: 8, // darkened plain grass (dark border, no foliage)
+  DARK_GRASS_TREE: 9, // darkened grass + tree
+  DARK_GRASS_BUSH: 10, // darkened grass + bush
 };
-export const TILE_COUNT = 7;
+export const TILE_COUNT = 11;
 export const TILESET_KEY = 'tiles-atlas';
 
 // Which loaded terrain sprite fills the walkable ground. Green grass by default;
@@ -61,9 +65,18 @@ export function preloadArt(scene) {
   scene.load.image('car-old', carOldUrl);
 }
 
+// Just the two car sprites — so the opening's "choose your vehicle" screen can
+// show the real cars before GameScene loads the rest of the art.
+export function preloadCars(scene) {
+  scene.load.image('car-icap', carIcapUrl);
+  scene.load.image('car-old', carOldUrl);
+}
+
 export const KYC_STRIPE_KEY = 'kyc-stripe';
 export const GRASS_CORNER_KEY = 'grass-round';
 export const DIRT_CORNER_KEY = 'dirt-round';
+export const GRASS_CORNER_DARK_KEY = 'grass-round-dark';
+export const DIRT_CORNER_DARK_KEY = 'dirt-round-dark';
 export const CURB_KEY = 'curb';
 
 // The 3 collectible alternatives: which map POI, display name, icon texture, and
@@ -83,13 +96,83 @@ export function makePlaceholderTextures(scene) {
   // rounds its INNER (concave) corners where grass pokes into the road.
   makeCornerOverlay(scene, GRASS_CORNER_KEY, 'art-grass');
   makeCornerOverlay(scene, DIRT_CORNER_KEY, GROUND_A);
+  // Dark-forest wedges: same shapes, dusk-washed to match the dark tiles.
+  makeCornerOverlay(scene, GRASS_CORNER_DARK_KEY, 'art-grass', true);
+  makeCornerOverlay(scene, DIRT_CORNER_DARK_KEY, GROUND_A, true);
+  makeTimerBox(scene);
   // Cars are loaded PNGs (keys car-icap / car-old) — nothing to generate.
+}
+
+// The stopwatch chip: a light-grey, bevelled UPSIDE-DOWN trapezoid (wide at the
+// top, tapering down) that hangs from the top border. Text is drawn over it.
+// Trace a rounded-corner polygon path (each vertex softened with a quad curve).
+function roundedPolyPath(ctx, pts, radius) {
+  const n = pts.length;
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const prev = pts[(i - 1 + n) % n];
+    const curr = pts[i];
+    const next = pts[(i + 1) % n];
+    const d1 = Math.hypot(curr.x - prev.x, curr.y - prev.y) || 1;
+    const d2 = Math.hypot(next.x - curr.x, next.y - curr.y) || 1;
+    const r1 = Math.min(radius, d1 / 2);
+    const r2 = Math.min(radius, d2 / 2);
+    const p1 = { x: curr.x + ((prev.x - curr.x) * r1) / d1, y: curr.y + ((prev.y - curr.y) * r1) / d1 };
+    const p2 = { x: curr.x + ((next.x - curr.x) * r2) / d2, y: curr.y + ((next.y - curr.y) * r2) / d2 };
+    if (i === 0) ctx.moveTo(p1.x, p1.y);
+    else ctx.lineTo(p1.x, p1.y);
+    ctx.quadraticCurveTo(curr.x, curr.y, p2.x, p2.y);
+  }
+  ctx.closePath();
+}
+
+// The stopwatch chip: an upside-down trapezoid with ROUNDED corners, drawn in
+// the same cover-screen text-box palette (drop shadow, dark outline, grey face,
+// light highlight tucked under the top of the outline).
+function makeTimerBox(scene) {
+  if (scene.textures.exists('timer-box')) return;
+  const W = 236;
+  const H = 64;
+  const R = 11;
+  const pts = [
+    { x: 10, y: 5 },
+    { x: W - 10, y: 5 },
+    { x: W - 40, y: H - 8 },
+    { x: 40, y: H - 8 },
+  ];
+  const tex = scene.textures.createCanvas('timer-box', W, H);
+  const ctx = tex.getContext();
+  ctx.lineJoin = 'round';
+  // drop shadow
+  ctx.save();
+  ctx.translate(0, 4);
+  ctx.fillStyle = 'rgba(10,20,40,0.32)';
+  roundedPolyPath(ctx, pts, R);
+  ctx.fill();
+  ctx.restore();
+  // grey face
+  ctx.fillStyle = '#c6c6c6';
+  roundedPolyPath(ctx, pts, R);
+  ctx.fill();
+  // light highlight rim along the top, clipped to the shape
+  ctx.save();
+  roundedPolyPath(ctx, pts, R);
+  ctx.clip();
+  ctx.fillStyle = '#eef0f2';
+  ctx.fillRect(0, 5, W, 7);
+  ctx.restore();
+  // dark outline on top
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#565656';
+  roundedPolyPath(ctx, pts, R);
+  ctx.stroke();
+  tex.refresh();
 }
 
 // A wedge of `srcKey` filling one cell's outer (NE) corner, its inner edge an
 // arc — laid on a corner cell it rounds off that corner. Rotated 0/90/180/270
 // by the caller for the four orientations.
-function makeCornerOverlay(scene, key, srcKey) {
+function makeCornerOverlay(scene, key, srcKey, dark) {
   if (scene.textures.exists(key)) return;
   const T = TILE_SIZE;
   const tex = scene.textures.createCanvas(key, T, T);
@@ -105,6 +188,13 @@ function makeCornerOverlay(scene, key, srcKey) {
   ctx.arc(T / 2, T / 2, T / 2, 0, Math.PI * 2); // carve the rounded inner edge
   ctx.fill();
   ctx.restore();
+  if (dark) {
+    // Dusk-wash the wedge, confined to the drawn shape, so it matches dark tiles.
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-atop';
+    applyDarkWash(ctx, 0, 0, T);
+    ctx.restore();
+  }
   tex.refresh();
   tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
 }
@@ -141,7 +231,7 @@ function makeAssetIcons(scene) {
   makeIcon(scene, 'icon-mustache', '#2b2320', drawMustache);
   makeIcon(scene, 'overpass-btn', '#d84b3a', drawBtnUp); // overpass button (raised)
   makeIcon(scene, 'overpass-btn-down', '#d84b3a', drawBtnDown); // overpass button (pressed)
-  makeIcon(scene, 'finish-target', '#d84b3a', drawBullseye);
+  makeIcon(scene, 'finish-flag', '#000000', drawFinishFlag);
 }
 
 function makeIcon(scene, key, fill, draw) {
@@ -272,47 +362,66 @@ function btnChevron(ctx, S, dark, yc) {
 }
 
 // Bullseye/target for the finish.
-function drawBullseye(ctx, S) {
-  const c = S / 2;
-  const rings = [
-    [0.46, '#d84b3a'],
-    [0.36, '#f4efe6'],
-    [0.26, '#d84b3a'],
-    [0.16, '#f4efe6'],
-    [0.07, '#d84b3a'],
-  ];
-  for (const [rr, col] of rings) {
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.arc(c, c, S * rr, 0, Math.PI * 2);
-    ctx.fill();
+// A checkered race flag on a pole, planted at the finish. Pole runs down the
+// canvas so the marker can be anchored with its base on the finish tile.
+function drawFinishFlag(ctx, S) {
+  const px = S * 0.28; // pole x
+  // pole
+  ctx.fillStyle = '#3a3f4d';
+  ctx.fillRect(px - S * 0.028, S * 0.1, S * 0.056, S * 0.82);
+  // knob on top
+  ctx.beginPath();
+  ctx.arc(px, S * 0.1, S * 0.05, 0, Math.PI * 2);
+  ctx.fillStyle = '#c4c4c4';
+  ctx.fill();
+  // checkered flag panel to the right of the pole top
+  const fx = px + S * 0.03;
+  const fy = S * 0.14;
+  const fw = S * 0.54;
+  const fh = S * 0.34;
+  const cols = 5;
+  const rows = 3;
+  const cw = fw / cols;
+  const ch = fh / rows;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      ctx.fillStyle = (r + c) % 2 === 0 ? '#1a1a1a' : '#f4efe6';
+      ctx.fillRect(fx + c * cw, fy + r * ch, cw + 0.5, ch + 0.5);
+    }
   }
   ctx.strokeStyle = '#1a1a1a';
-  ctx.lineWidth = S * 0.03;
-  ctx.beginPath();
-  ctx.arc(c, c, S * 0.46, 0, Math.PI * 2);
-  ctx.stroke();
+  ctx.lineWidth = S * 0.02;
+  ctx.strokeRect(fx, fy, fw, fh);
 }
 
 function drawMustache(ctx, S, fill) {
   const c = S / 2;
-  const y = S * 0.46;
   ctx.fillStyle = fill;
+  // Symmetric handlebar: dips at the centre (under the nose), sweeps out and
+  // down, and the tips curl back up. Right half mirrors the left.
+  const half = (sx) => {
+    ctx.moveTo(c, S * 0.42);
+    ctx.bezierCurveTo(c + sx * S * 0.08, S * 0.36, c + sx * S * 0.22, S * 0.36, c + sx * S * 0.34, S * 0.42);
+    ctx.bezierCurveTo(c + sx * S * 0.46, S * 0.48, c + sx * S * 0.5, S * 0.4, c + sx * S * 0.46, S * 0.38);
+    ctx.bezierCurveTo(c + sx * S * 0.44, S * 0.5, c + sx * S * 0.3, S * 0.54, c + sx * S * 0.18, S * 0.52);
+    ctx.bezierCurveTo(c + sx * S * 0.08, S * 0.5, c + sx * S * 0.03, S * 0.52, c, S * 0.48);
+  };
   ctx.beginPath();
-  ctx.moveTo(c, y + S * 0.02);
-  ctx.quadraticCurveTo(c - S * 0.14, y - S * 0.1, c - S * 0.3, y - S * 0.06);
-  ctx.quadraticCurveTo(c - S * 0.46, y - S * 0.02, c - S * 0.42, y + S * 0.12);
-  ctx.quadraticCurveTo(c - S * 0.3, y + S * 0.06, c - S * 0.16, y + S * 0.1);
-  ctx.quadraticCurveTo(c - S * 0.06, y + S * 0.12, c, y + S * 0.08);
-  ctx.quadraticCurveTo(c + S * 0.06, y + S * 0.12, c + S * 0.16, y + S * 0.1);
-  ctx.quadraticCurveTo(c + S * 0.3, y + S * 0.06, c + S * 0.42, y + S * 0.12);
-  ctx.quadraticCurveTo(c + S * 0.46, y - S * 0.02, c + S * 0.3, y - S * 0.06);
-  ctx.quadraticCurveTo(c + S * 0.14, y - S * 0.1, c, y + S * 0.02);
+  half(-1);
+  half(1);
   ctx.closePath();
   ctx.fill();
 }
 
-// Composite the 6-tile atlas onto a canvas texture from the loaded sprites.
+// Dusk wash for the dark forest: a flat translucent film over the border art.
+// (The light/dark seam is blended instead by scattering opposite-shade trees &
+// bushes across it — see GameScene.foliageIndex / foliageIndexDark.)
+function applyDarkWash(ctx, x0, y0, size) {
+  ctx.fillStyle = 'rgba(8,16,12,0.42)';
+  ctx.fillRect(x0, y0, size, size);
+}
+
+// Composite the tile atlas onto a canvas texture from the loaded sprites.
 function makeTilesAtlas(scene) {
   if (scene.textures.exists(TILESET_KEY)) return;
   const T = TILE_SIZE;
@@ -345,6 +454,22 @@ function makeTilesAtlas(scene) {
   // sprite (GameScene.addOverpassCurbs) so it faces outward on each edge.
   ctx.drawImage(concrete, 34, 34, 60, 60, cell(TILE_INDEX.CONCRETE), 0, T, T);
   ctx.drawImage(concrete, 34, 34, 60, 60, cell(TILE_INDEX.BRIDGE), 0, T, T);
+  // Dark forest variants — the SAME border art (dark walkable dirt, plus plain
+  // grass / grass+tree / grass+bush) with the dusk dither on top, so a painted
+  // dark forest scatters trees & bushes exactly like the light green border.
+  ctx.drawImage(groundA, cell(TILE_INDEX.DARK_GROUND), 0, T, T);
+  applyDarkWash(ctx, cell(TILE_INDEX.DARK_GROUND), 0, T);
+
+  ctx.drawImage(grass, cell(TILE_INDEX.DARK_GRASS), 0, T, T);
+  applyDarkWash(ctx, cell(TILE_INDEX.DARK_GRASS), 0, T);
+
+  ctx.drawImage(grass, cell(TILE_INDEX.DARK_GRASS_TREE), 0, T, T);
+  ctx.drawImage(tree, cell(TILE_INDEX.DARK_GRASS_TREE) + 3, 1, T - 6, T - 4);
+  applyDarkWash(ctx, cell(TILE_INDEX.DARK_GRASS_TREE), 0, T);
+
+  ctx.drawImage(grass, cell(TILE_INDEX.DARK_GRASS_BUSH), 0, T, T);
+  ctx.drawImage(bush, cell(TILE_INDEX.DARK_GRASS_BUSH) + 8, 8, T - 16, T - 16);
+  applyDarkWash(ctx, cell(TILE_INDEX.DARK_GRASS_BUSH), 0, T);
 
   canvasTex.refresh();
   // Nearest sampling on the tileset kills atlas edge-bleed (a tile's edge

@@ -12,7 +12,7 @@
 // stage. GameScene also fades the disguise off the map marker on collect.
 // ---------------------------------------------------------------------------
 
-const PULL_OFF_DIST = 130; // px a piece must be dragged before it comes free
+const PULL_OFF_DIST = 60; // px a piece must be dragged (from its own spot) to come free
 
 export function runDisguiseAltTask(scene, ui, opts, onComplete) {
   const kb = scene.input.keyboard;
@@ -37,12 +37,16 @@ export function runDisguiseAltTask(scene, ui, opts, onComplete) {
   }
 
   function makeDraggable(obj) {
+    // Measure the pull from the piece's OWN resting spot (not the asset centre),
+    // so each piece detaches after the same short drag regardless of where it sits.
+    const startX = obj.x;
+    const startY = obj.y;
     obj.setInteractive({ useHandCursor: true });
     ui.input.setDraggable(obj);
     obj.on('drag', (pointer, dragX, dragY) => obj.setPosition(dragX, dragY));
     obj.on('dragend', () => {
       if (obj.getData('off')) return;
-      if (Math.hypot(obj.x - cx, obj.y - cy) > PULL_OFF_DIST) {
+      if (Math.hypot(obj.x - startX, obj.y - startY) > PULL_OFF_DIST) {
         obj.setData('off', true);
         obj.disableInteractive(); // pulled free; it stays where it was dropped
         removed += 1;

@@ -1,6 +1,7 @@
 import {
   defaultTiles,
   defaultOverpass,
+  defaultShade,
   defaultPois,
   TILES,
   MAP_W,
@@ -23,7 +24,7 @@ import {
 
 // Bump this when the committed map changes (dimensions or POIs) so stale
 // browser saves from earlier iterations are discarded rather than loaded.
-const KEY = 'drive.level1.map.v5'; // v5: split base terrain + overpass overlay
+const KEY = 'drive.level1.map.v13'; // v13: redesigned pre-overpass path + shading
 
 export { TILES, MAP_W, MAP_H };
 
@@ -37,6 +38,7 @@ function defaultMap() {
     h: MAP_H,
     tiles: defaultTiles(),
     overpass: defaultOverpass(),
+    shade: defaultShade(),
     pois: defaultPois(),
   };
 }
@@ -85,7 +87,8 @@ export function loadMap() {
         const pois = clonePois(data.pois);
         if (startIsOnGround(tiles, pois)) {
           const overpass = data.overpass ? decodeRows(data.overpass) : zeros();
-          return { w: data.w, h: data.h, tiles, overpass, pois };
+          const shade = data.shade ? decodeRows(data.shade) : zeros();
+          return { w: data.w, h: data.h, tiles, overpass, shade, pois };
         }
       }
     }
@@ -95,13 +98,14 @@ export function loadMap() {
   return defaultMap();
 }
 
-export function saveMap({ tiles, overpass, pois }) {
+export function saveMap({ tiles, overpass, shade, pois }) {
   try {
     const data = {
       w: MAP_W,
       h: MAP_H,
       tiles: encodeRows(tiles),
       overpass: encodeRows(overpass),
+      shade: encodeRows(shade),
       pois,
     };
     localStorage.setItem(KEY, JSON.stringify(data));
@@ -112,9 +116,16 @@ export function saveMap({ tiles, overpass, pois }) {
 }
 
 // Pretty JSON for download / committing as the canonical map.
-export function exportJson({ tiles, overpass, pois }) {
+export function exportJson({ tiles, overpass, shade, pois }) {
   return JSON.stringify(
-    { w: MAP_W, h: MAP_H, tiles: encodeRows(tiles), overpass: encodeRows(overpass), pois },
+    {
+      w: MAP_W,
+      h: MAP_H,
+      tiles: encodeRows(tiles),
+      overpass: encodeRows(overpass),
+      shade: encodeRows(shade),
+      pois,
+    },
     null,
     2,
   );
