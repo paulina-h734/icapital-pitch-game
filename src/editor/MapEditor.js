@@ -36,7 +36,7 @@ const POI_BUTTONS = [
   { key: 'alt-disguise', label: 'Disguise' },
   { key: 'alt-caged', label: 'Caged' },
   { key: 'kyc1', label: 'KYC 1' },
-  { key: 'kyc2', label: 'KYC 2' },
+  { key: 'architect', label: 'Architect' },
   { key: 'overpass', label: 'Overpass' },
   { key: 'finish', label: 'Finish' },
   { key: 'sign-subscription', label: 'Sub. sign' },

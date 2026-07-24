@@ -74,9 +74,8 @@ export function runDisguiseAltTask(scene, ui, opts, onComplete) {
 
   function showCollect() {
     ui.showPrompt({
-      title: 'Inspected',
-      body: "Up close it's harmless — the disguise was hiding nothing untoward. Now you actually know, instead of guessing.",
-      hint: 'Press E to collect',
+      body: "Up close it's harmless. Now you actually know, instead of guessing.",
+      hint: 'Press E to collect private credit',
     });
   }
 
@@ -87,14 +86,12 @@ export function runDisguiseAltTask(scene, ui, opts, onComplete) {
   build();
   if (opts.isICap) {
     ui.showPrompt({
-      title: 'iCapCar · diligence',
       body: "iCapCar's scanner inspected the asset automatically — the disguise hid nothing.",
-      hint: 'Press E to collect',
+      hint: 'Press E to collect private credit',
     });
   } else {
     ui.showPrompt({
-      title: 'Disguise',
-      body: "Something about this asset looks off. Inspect it closely before you trust it — pull the disguise off.",
+      body: 'Something about this asset looks off. Inspect it closely before you trust it.',
       hint: 'Drag the hat and the moustache off the asset',
     });
   }

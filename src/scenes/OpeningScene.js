@@ -149,7 +149,7 @@ export default class OpeningScene extends Phaser.Scene {
       const img = this.add
         .image(W * fx, H * fy, 'cloud')
         .setScale(scale)
-        .setAlpha(0.95)
+        .setAlpha(0.7)
         .setDepth(-5);
       return { img, speed, margin: margin * scale };
     });
@@ -218,8 +218,9 @@ export default class OpeningScene extends Phaser.Scene {
   }
 
   // Left-aligned text (for laying out a document). Defaults to the body font.
-  leftText(x, y, str, size, color, font = FONT_BODY, wrap) {
+  leftText(x, y, str, size, color, font = FONT_BODY, wrap, bold) {
     const style = { fontFamily: font, fontSize: `${size}px`, color };
+    if (bold) style.fontStyle = 'bold';
     if (wrap) style.wordWrap = { width: wrap };
     const t = this.add.text(x, y, str, style).setOrigin(0, 0.5).setResolution(2);
     this.els.push(t);
@@ -282,7 +283,7 @@ export default class OpeningScene extends Phaser.Scene {
     const { W, H } = this;
     // bubble-letter title: white fill + thick navy outline + soft shadow, so it
     // pops against the (also white) clouds and the sky.
-    const title = this.label(W / 2, H * 0.27, 'iCapital', 104, '#ffffff', { fontFamily: FONT_TITLE });
+    const title = this.label(W / 2, H * 0.32, 'iCapital', 104, '#ffffff', { fontFamily: FONT_TITLE });
     title.setStroke('#173453', 14);
     title.setShadow(3, 5, 'rgba(10,24,48,0.45)', 8, false, true);
     const sub = this.label(W / 2, H * 0.42, 'DRIVE THE JOURNEY', 46, '#ffffff', {
@@ -303,12 +304,12 @@ export default class OpeningScene extends Phaser.Scene {
     this.value = '';
     this.onSubmit = onSubmit;
     const { W, H } = this;
-    this.label(W / 2, H * 0.31, title, 40, '#ffffff', {
+    this.label(W / 2, H * 0.36, title, 40, '#ffffff', {
       fontFamily: FONT_TITLE,
       stroke: '#173453',
       strokeThickness: 8,
     });
-    this.label(W / 2, H * 0.43, question, 27, '#eef6ff');
+    this.label(W / 2, H * 0.44, question, 27, '#eef6ff', { fontStyle: 'bold' });
     // framed light-grey input field, so the caret has an intentional home
     this.roundedPanel(W / 2, H * 0.56, 520, 68, 16);
     this.valueText = this.label(W / 2, H * 0.56, '|', 36, '#25344c', {
@@ -348,7 +349,7 @@ export default class OpeningScene extends Phaser.Scene {
   chooseVehicle() {
     this.clearScreen();
     this.state = 'car';
-    this.label(this.W / 2, this.H * 0.15, 'Choose your vehicle', 42, '#ffffff', {
+    this.label(this.W / 2, this.H * 0.19, 'Choose your vehicle', 42, '#ffffff', {
       fontFamily: FONT_TITLE,
       stroke: '#173453',
       strokeThickness: 8,
@@ -380,30 +381,22 @@ export default class OpeningScene extends Phaser.Scene {
     });
   }
 
+  // Rusty-car only (the iCapCar goes straight to its briefing).
   showUnlock() {
     this.clearScreen();
     this.state = 'unlock';
-    const title = this.isICap ? 'iGPS unlocked' : 'Old map unlocked';
-    const body = this.isICap
-      ? 'iCapCar can unlock special abilities — follow the iGPS to find them all.'
-      : 'You have unlocked the old map (very crumpled). You are on your own out there.';
-    this.label(this.W / 2, this.H * 0.36, title, 42, this.isICap ? '#d6ecff' : '#ffd0ba', {
+    this.label(this.W / 2, this.H * 0.4, 'Now Driving the Rusty Car', 54, '#ffd0ba', {
       fontFamily: FONT_TITLE,
       stroke: '#173453',
-      strokeThickness: 8,
+      strokeThickness: 9,
     });
-    this.label(this.W / 2, this.H * 0.5, body, 24, '#eef6ff', {
-      wordWrap: { width: 680 },
+    this.label(this.W / 2, this.H * 0.49, "You're on your own", 32, '#eef6ff', {
+      fontStyle: 'bold',
       align: 'center',
     });
-    this.label(
-      this.W / 2,
-      this.H * 0.66,
-      this.isICap ? 'Press Enter to continue' : 'Press Enter to drive',
-      21,
-      '#c9f5d8',
-      { fontStyle: 'bold' },
-    );
+    this.label(this.W / 2, this.H * 0.64, 'Press Enter to drive', 21, '#c9f5d8', {
+      fontStyle: 'bold',
+    });
   }
 
   // iCap-only: announce the briefing before opening it (a little "you've got
@@ -412,18 +405,18 @@ export default class OpeningScene extends Phaser.Scene {
     this.clearScreen();
     this.state = 'briefIntro';
     const { W, H } = this;
-    this.label(W / 2, H * 0.34, 'New briefing received', 46, '#ffffff', {
+    this.label(W / 2, H * 0.4, 'Now Driving iCapCar', 54, '#ffffff', {
       fontFamily: FONT_TITLE,
       stroke: '#173453',
-      strokeThickness: 8,
+      strokeThickness: 9,
     });
     this.label(
       W / 2,
-      H * 0.48,
-      'Your iGPS has plotted the whole journey. Open the briefing to see the road ahead.',
-      24,
+      H * 0.49,
+      'Open its provided briefing to see what lies ahead',
+      32,
       '#eef6ff',
-      { wordWrap: { width: 720 }, align: 'center' },
+      { fontStyle: 'bold', wordWrap: { width: 820 }, align: 'center' },
     );
     this.label(W / 2, H * 0.64, 'Press Enter to open', 21, '#eaf3ff', { fontStyle: 'bold' });
   }
@@ -457,6 +450,7 @@ export default class OpeningScene extends Phaser.Scene {
       '#5a6478',
       FONT_BODY,
       pw - 92,
+      true,
     );
 
     const stops = [
@@ -478,7 +472,7 @@ export default class OpeningScene extends Phaser.Scene {
         .setResolution(2);
       this.els.push(dot, num);
       this.leftText(left + 52, y - 11, stop, 24, '#1c2b45', FONT_TITLE);
-      this.leftText(left + 52, y + 15, desc, 17, '#5a6478', FONT_BODY, pw - 160);
+      this.leftText(left + 52, y + 15, desc, 17, '#4a5568', FONT_BODY, pw - 160, true);
     });
 
     this.label(cx, top + ph - 32, 'Press Enter to begin', 21, '#2d6cdf', { fontStyle: 'bold' });
@@ -491,12 +485,17 @@ export default class OpeningScene extends Phaser.Scene {
     this.state = 'results';
     const { W, H } = this;
     const best = data.best || loadBestTimes();
-    this.label(W / 2, H * 0.15, 'Run complete', 48, '#ffffff', {
+    this.label(W / 2, H * 0.26, 'Run complete', 56, '#ffffff', {
       fontFamily: FONT_TITLE,
       stroke: '#173453',
-      strokeThickness: 8,
+      strokeThickness: 9,
     });
-    this.label(W / 2, H * 0.26, 'BEST TIMES', 22, '#eaf3ff', { fontStyle: 'bold' });
+    this.label(W / 2, H * 0.33, 'BEST TIMES', 30, '#ffe08a', {
+      fontFamily: FONT_TITLE,
+      fontStyle: 'bold',
+      stroke: '#173453',
+      strokeThickness: 5,
+    });
     this.resultRow(W / 2, H * 0.4, 'Rusty car', best.old, data.isICap === false);
     this.resultRow(W / 2, H * 0.53, 'iCapCar', best.icap, data.isICap === true);
     // Return home = full reset (clears best times); Run again = keep names, re-pick car.

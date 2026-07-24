@@ -27,7 +27,6 @@ export function runKycGate(scene, ui, opts, onComplete) {
   function askName(warn) {
     state = 'name';
     ui.showPrompt({
-      title: 'Security checkpoint',
       body: "Identity check — verify your client's name.",
       input,
       hint: warn ? "That doesn't match — try again" : 'Type the name, then press Enter',
@@ -39,7 +38,6 @@ export function runKycGate(scene, ui, opts, onComplete) {
     state = 'food';
     input = '';
     ui.showPrompt({
-      title: 'Security checkpoint',
       body: "Second factor — verify your client's favourite food.",
       input,
       hint: warn ? "That doesn't match — try again" : 'Type the answer, then press Enter',
@@ -50,7 +48,6 @@ export function runKycGate(scene, ui, opts, onComplete) {
   function success() {
     state = 'success';
     ui.showPrompt({
-      title: 'Identity verified',
       body: `Welcome, ${opts.clientName}. Identity Solutions confirmed your client — the gate is open.`,
       hint: 'Press Enter to proceed',
     });
@@ -89,14 +86,12 @@ export function runKycGate(scene, ui, opts, onComplete) {
   if (!opts.allCollected) {
     state = 'blocked';
     ui.showPrompt({
-      title: 'KYC customs',
       body: `Customs can't clear this client yet — you've verified ${opts.collectedCount} of 3 alternatives. Finish your diligence, then come back.`,
       hint: 'Press Enter to turn back',
     });
   } else if (opts.isICap) {
     state = 'icap';
     ui.showPrompt({
-      title: 'iCapCar · Identity Solutions',
       body: `Identity Solutions verified ${opts.clientName} automatically. Welcome — have a nice day, ${opts.clientName}.`,
       hint: 'Press Enter to continue',
     });

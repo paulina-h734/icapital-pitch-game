@@ -24,7 +24,7 @@ import {
 
 // Bump this when the committed map changes (dimensions or POIs) so stale
 // browser saves from earlier iterations are discarded rather than loaded.
-const KEY = 'drive.level1.map.v13'; // v13: redesigned pre-overpass path + shading
+const KEY = 'drive.level1.map.v16'; // v16: finish line adjusted
 
 export { TILES, MAP_W, MAP_H };
 

@@ -99,6 +99,7 @@ export function makePlaceholderTextures(scene) {
   makeKycBarrierTexture(scene);
   makeCurbTexture(scene);
   makeAssetIcons(scene);
+  makeArchitectMarker(scene);
   // Grass wedge rounds the driving area's OUTER (convex) corners; dirt wedge
   // rounds its INNER (concave) corners where grass pokes into the road.
   makeCornerOverlay(scene, GRASS_CORNER_KEY, 'art-grass');
@@ -202,6 +203,62 @@ function makeCornerOverlay(scene, key, srcKey, dark) {
     applyDarkWash(ctx, 0, 0, T);
     ctx.restore();
   }
+  tex.refresh();
+  tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+}
+
+// Architect-phase marker: a little work site — a wooden fence with a red toolbox
+// sitting in the middle. Bold navy outlines to match the cartoon style.
+function makeArchitectMarker(scene) {
+  if (scene.textures.exists('architect-marker')) return;
+  const W = 104;
+  const H = 86;
+  const tex = scene.textures.createCanvas('architect-marker', W, H);
+  const ctx = tex.getContext();
+  const NAVY = '#173453';
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  const woodPlank = (x, y, w, h) => {
+    ctx.fillStyle = '#b07a44';
+    ctx.strokeStyle = NAVY;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.fill();
+    ctx.stroke();
+  };
+  // fence: two posts + two rails behind the toolbox
+  woodPlank(14, 30, 13, 50);
+  woodPlank(78, 30, 13, 50);
+  woodPlank(10, 42, 85, 10);
+  woodPlank(10, 62, 85, 10);
+  // toolbox body
+  const bx = 34;
+  const bw = 36;
+  const by = 42;
+  const bh = 26;
+  ctx.fillStyle = '#d84b3a';
+  ctx.strokeStyle = NAVY;
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.rect(bx, by, bw, bh);
+  ctx.fill();
+  ctx.stroke();
+  // lid
+  ctx.fillStyle = '#b83a2b';
+  ctx.beginPath();
+  ctx.rect(bx - 3, by - 9, bw + 6, 13);
+  ctx.fill();
+  ctx.stroke();
+  // handle
+  ctx.strokeStyle = NAVY;
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(bx + bw / 2, by - 9, 10, Math.PI, 0);
+  ctx.stroke();
+  // latch
+  ctx.fillStyle = NAVY;
+  ctx.fillRect(bx + bw / 2 - 3, by + 4, 6, 9);
   tex.refresh();
   tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
 }

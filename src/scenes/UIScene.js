@@ -161,44 +161,46 @@ export default class UIScene extends Phaser.Scene {
   // --- system prompt (lower third) ------------------------------------------
 
   buildPrompt() {
-    const pad = 30;
+    const pad = 34;
     const px = 60;
-    const ph = 240;
+    const ph = 198;
     const py = this.H - ph - 44;
     const pw = this.W - px * 2;
 
     // Dim sits below the task graphics (default depth 0) but above the world.
     this.dim = this.add.rectangle(0, 0, this.W, this.H, 0x0b1020, 0.5).setOrigin(0).setDepth(-1);
-    // Light-grey rounded panel — the same "cover screen" text-box style.
+    // Light-grey rounded panel — the same "cover screen" text-box style. No
+    // header now (the tasks dropped their titles), so the body starts near the top.
     const panel = drawPanel(this, px + pw / 2, py + ph / 2, pw, ph, 24).setDepth(30);
-    this.pTitle = this.add
-      .text(px + pad, py + 18, '', { fontFamily: FONT_TITLE, fontSize: '26px', color: '#222222' })
-      .setResolution(2)
-      .setDepth(31);
     this.pBody = this.add
-      .text(px + pad, py + 62, '', {
+      .text(px + pad, py + 24, '', {
         fontFamily: FONT_BODY,
-        fontSize: '24px',
-        color: '#373737',
+        fontSize: '28px',
+        fontStyle: 'bold',
+        color: '#242424',
         wordWrap: { width: pw - pad * 2 },
         lineSpacing: 6,
       })
       .setResolution(2)
       .setDepth(31);
     this.pInput = this.add
-      .text(px + pad, py + 152, '', { fontFamily: 'monospace', fontSize: '32px', color: '#20406e' })
+      .text(px + pad, py + 108, '', { fontFamily: 'monospace', fontSize: '34px', color: '#20406e' })
       .setResolution(2)
       .setDepth(31);
     this.pHint = this.add
-      .text(px + pad, py + ph - 34, '', { fontFamily: FONT_BODY, fontSize: '18px', color: '#2e6d3a' })
+      .text(px + pad, py + ph - 42, '', {
+        fontFamily: FONT_BODY,
+        fontSize: '22px',
+        fontStyle: 'bold',
+        color: '#2e6d3a',
+      })
       .setResolution(2)
       .setDepth(31);
 
-    this.promptEls = [this.dim, panel, this.pTitle, this.pBody, this.pInput, this.pHint];
+    this.promptEls = [this.dim, panel, this.pBody, this.pInput, this.pHint];
   }
 
-  showPrompt({ title = '', body = '', input = '', hint = '', warn = false }) {
-    this.pTitle.setText(title);
+  showPrompt({ body = '', input = '', hint = '', warn = false }) {
     this.pBody.setText(body);
     this.setInput(input);
     this.pHint.setText(hint).setColor(warn ? '#a33a3a' : '#2e6d3a');

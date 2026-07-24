@@ -79,18 +79,18 @@ export function runCagedAltTask(scene, ui, opts, onComplete) {
   function showClue(warn) {
     input = '';
     ui.showPrompt({
-      title: `Diligence clue ${idx + 1} of 3`,
       body: `${clues[idx].text} = ?`,
-      hint: warn ? "That doesn't reconcile — check it and try again" : 'Type your answer, then press Enter',
+      hint: warn
+        ? "That doesn't reconcile — check it and try again"
+        : `Clue ${idx + 1} of 3 · type your answer, then press Enter`,
       warn: !!warn,
     });
   }
 
   function showUnlock() {
     ui.showPrompt({
-      title: 'Verified',
-      body: 'The asset passed diligence and the cage opens. Diligence is what keeps a bad alt out of your client’s book.',
-      hint: 'Press E to collect',
+      body: 'The asset passed diligence and the cage opens.',
+      hint: 'Press E to collect real assets',
     });
   }
 
@@ -135,14 +135,12 @@ export function runCagedAltTask(scene, ui, opts, onComplete) {
   if (opts.isICap) {
     openCage();
     ui.showPrompt({
-      title: 'iCapCar · diligence',
       body: 'iCapCar ran full diligence on this alternative and cleared the cage automatically.',
-      hint: 'Press E to collect',
+      hint: 'Press E to collect real assets',
     });
   } else {
     ui.showPrompt({
-      title: 'Diligence cage',
-      body: "This alternative is sealed until it's verified — nothing enters your client's book on faith. Crack 3 quick diligence clues to unlock it.",
+      body: 'This asset is sealed away until its diligence criteria is met. Crack three quick diligence clues to unlock it.',
       hint: 'Press Enter to begin',
     });
   }

@@ -90,17 +90,20 @@ export function runArchitect(scene, ui, opts, onComplete) {
   keep(ui.add.circle(cx, cy, r - 3, 0x14233f).setStrokeStyle(5, 0x173453).setDepth(61));
 
   // Title + hole label (bubble-letter title).
-  label(cx, H * 0.13, 'Architect the allocation', 36, '#ffffff', {
+  label(cx, H * 0.13, 'Architect the portfolio', 36, '#ffffff', {
     fontFamily: FONT_TITLE,
     stroke: '#173453',
     strokeThickness: 7,
   });
   label(cx, cy, client, 17, '#dfeaff', { fontFamily: FONT_TITLE, wordWrap: { width: r * 1.5 }, align: 'center' });
 
-  // Radial segment labels; alt labels start dim and brighten when filled.
+  // Radial segment labels; alt labels start dim and brighten when filled. Bold
+  // with a touch more line spacing so the name + percentage read clearly.
   for (const s of segs) {
-    s.text = label(s.lx, s.ly, `${s.label}\n${s.pct}%`, 14, s.alt ? '#7f8db0' : '#dfe7f5', {
+    s.text = label(s.lx, s.ly, `${s.label}\n${s.pct}%`, 15, s.alt ? '#8f9dc0' : '#eef3ff', {
       align: 'center',
+      fontStyle: 'bold',
+      lineSpacing: 3,
     });
   }
 

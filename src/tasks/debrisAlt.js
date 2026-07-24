@@ -108,9 +108,8 @@ export function runDebrisAltTask(scene, ui, opts, onComplete) {
 
   function showCollect() {
     ui.showPrompt({
-      title: 'Inspected',
-      body: 'The asset checks out under all that debris — nothing hidden. Clearing it is how you know.',
-      hint: 'Press E to collect',
+      body: "After some digging, you're more confident about adding this asset to your client's portfolio.",
+      hint: 'Press E to collect private equity',
     });
   }
 
@@ -126,14 +125,12 @@ export function runDebrisAltTask(scene, ui, opts, onComplete) {
   build();
   if (opts.isICap) {
     ui.showPrompt({
-      title: 'iCapCar · diligence',
       body: "iCapCar's built-in vacuum cleared the debris and inspected the asset automatically.",
-      hint: 'Press E to collect',
+      hint: 'Press E to collect private equity',
     });
   } else {
     ui.showPrompt({
-      title: 'Debris',
-      body: "This asset is buried under debris — you can't judge what you can't see. Clear it before it enters your client's book.",
+      body: "You need to learn more about this asset, but the information is buried under debris. Clear it before it enters your client's book.",
       hint: 'Click or press Space to clear the pile',
     });
   }

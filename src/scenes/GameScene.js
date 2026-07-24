@@ -45,18 +45,18 @@ const ALT_TASKS = {
   'alt-disguise': runDisguiseAltTask,
 };
 // Alternative each map POI represents — shown in the iCapCar's drive-through
-// pickup toast ("Private Equity acquired!"). Maps 1:1 to the architect's slices.
+// pickup toast ("Private equity acquired!"). Sentence-cased since it starts the
+// toast; the descriptors aren't proper nouns. Maps 1:1 to the architect's slices.
 const ALT_NAMES = {
-  'alt-debris': 'Private Equity',
-  'alt-disguise': 'Private Credit',
-  'alt-caged': 'Real Assets',
+  'alt-debris': 'Private equity',
+  'alt-disguise': 'Private credit',
+  'alt-caged': 'Real assets',
 };
 
 // KYC customs gates: a barrier across the road that opens once verified.
 // KYC 1 also requires all alts collected first; KYC 2 is just re-verification.
 const GATES = {
   kyc1: { requiresAlts: true },
-  kyc2: { requiresAlts: false },
 };
 const GATE_RADIUS = 2.0; // tiles — fires the checkpoint before the barrier
 const ALT_COUNT = 3;
@@ -125,12 +125,12 @@ export default class GameScene extends Phaser.Scene {
     // Task / collection state.
     this.collected = new Set();
     this.inventory = [];
-    // The run clock spans the Architect stage + the drive: it starts as the
-    // Architect overlay opens (below) and stops at the finish line, so BOTH the
-    // manual architect and the manual driving feed the rusty-vs-iCap gap.
-    this.runStartMs = this.time.now;
+    // The run clock spans the whole drive (including the mid-route Architect
+    // stage and every manual task) and stops at the finish line.
+    this.runStartMs = this.game.loop.now;
     this.runActive = true;
-    this.architecting = true; // pauses driving until the allocation is set
+    this.architecting = false; // architect is now a mid-route POI, not a start gate
+    this.architectDone = false;
 
     // Client identity for KYC — set by the opening sequence; defaults keep the
     // gate playable if GameScene is launched standalone (dev).
@@ -144,23 +144,9 @@ export default class GameScene extends Phaser.Scene {
     this.finished = false;
     this.setupGates();
 
-    // Parallel HUD/prompt scene (crisp screen-space UI at zoom 1). Once it's
-    // ready, open the Architect stage (build the allocation before driving).
-    const startArchitect = () => {
-      runArchitect(
-        this,
-        this.scene.get('UI'),
-        { isICap: this.isICap, clientName: this.registry.get('clientName') },
-        () => {
-          this.architecting = false;
-        },
-      );
-    };
-    if (this.scene.isActive('UI')) startArchitect();
-    else {
-      this.scene.launch('UI');
-      this.scene.get('UI').events.once(Phaser.Scenes.Events.CREATE, startArchitect);
-    }
+    // Parallel HUD/prompt scene (crisp screen-space UI at zoom 1). The Architect
+    // now runs mid-route at its own POI (see checkTriggers), not at the start.
+    if (!this.scene.isActive('UI')) this.scene.launch('UI');
 
     // Debug map editor — dev-only so it never ships in the pitch build.
     if (DEV) {
@@ -439,6 +425,12 @@ export default class GameScene extends Phaser.Scene {
           .image(px, py - TILE_SIZE * 0.35, 'overpass-btn')
           .setDisplaySize(TILE_SIZE * 1.6, TILE_SIZE * 1.6);
         break;
+      case 'architect':
+        // Work-site marker (fence + toolbox) at the architect phase.
+        marker = this.add
+          .image(px, py - TILE_SIZE * 0.2, 'architect-marker')
+          .setDisplaySize(TILE_SIZE * 2.5, TILE_SIZE * 2.5 * (86 / 104));
+        break;
       case 'start':
       default:
         marker = this.add.rectangle(px, py, TILE_SIZE * 0.6, TILE_SIZE * 0.6, POI_COLORS.start);
@@ -450,7 +442,7 @@ export default class GameScene extends Phaser.Scene {
     if (marker.setStrokeStyle) marker.setStrokeStyle(2, 0x1a1a1a); // shapes only, not the icon images
     // KYC checkpoints are drawn as the sliding gate (createBarrier); the start
     // never needs a marker (you never return). Hide both.
-    if (p.type === 'kyc1' || p.type === 'kyc2' || p.type === 'start') marker.setVisible(false);
+    if (p.type === 'kyc1' || p.type === 'start') marker.setVisible(false);
 
     // Route signs get a directional arrow etched beside the text (express points
     // right toward the overpass; subscription points left into the forest maze).
@@ -545,6 +537,13 @@ export default class GameScene extends Phaser.Scene {
     // centre ourselves — Phaser's built-in bounds clamp mis-behaves when zoomed.
     cam.setZoom(RENDER_SCALE);
     cam.useBounds = false;
+    // Snap the world camera to integer device pixels. The tile atlas packs a
+    // green grass cell right next to the ground/concrete cells, so at sub-pixel
+    // scroll positions their shared edge would occasionally sample the green
+    // neighbour and "blink" a green border while driving. Rounding kills that
+    // bleed. Only the world camera rounds — the UI camera stays smooth so HUD
+    // text keeps its antialiased edges.
+    cam.setRoundPixels(true);
     this.centerCameraOn(this.driver.x, this.driver.y);
   }
 
@@ -664,7 +663,10 @@ export default class GameScene extends Phaser.Scene {
   }
 
   elapsed() {
-    return this.time.now - this.runStartMs;
+    // game.loop.now (not scene time.now) — the scene clock reads a stale value at
+    // create() on a restart and then jumps on the first update, which would add
+    // the between-runs time to the next run's clock.
+    return this.game.loop.now - this.runStartMs;
   }
 
   // --- collection triggers ---------------------------------------------------
@@ -692,6 +694,19 @@ export default class GameScene extends Phaser.Scene {
         }
         return;
       }
+    }
+    // Architect: one-shot when the car reaches the placed architect POI (after
+    // the alts, before KYC) — both cars build the allocation here.
+    const arch = this.poiByType('architect');
+    if (arch && !this.architectDone) {
+      const nowIn = this.near(arch, TRIGGER_RADIUS);
+      const wasIn = this.inRange.has('architect');
+      if (nowIn && !wasIn) {
+        this.inRange.add('architect');
+        this.startArchitectTask();
+        return;
+      }
+      if (!nowIn && wasIn) this.inRange.delete('architect');
     }
     // Gates: fire on the rising edge (entering range) so a shut gate you're
     // parked against doesn't re-prompt every frame.
@@ -743,6 +758,21 @@ export default class GameScene extends Phaser.Scene {
     this.interacting = true;
     this.driver.body.setVelocity(0, 0);
     task(this, this.scene.get('UI'), { isICap: this.isICap }, () => this.finishTask(poi));
+  }
+
+  // The Architect allocation task, triggered at its mid-route POI.
+  startArchitectTask() {
+    this.interacting = true;
+    this.driver.body.setVelocity(0, 0);
+    runArchitect(
+      this,
+      this.scene.get('UI'),
+      { isICap: this.isICap, clientName: this.registry.get('clientName') },
+      () => {
+        this.interacting = false;
+        this.architectDone = true;
+      },
+    );
   }
 
   startKycGate(poi) {
@@ -962,7 +992,12 @@ export default class GameScene extends Phaser.Scene {
     const { px, py } = this.tileToWorld(poi.x, poi.y);
     const by = py - TILE_SIZE * 1.2;
     const label = this.add
-      .text(px, by, text, { fontFamily: FONT_BODY, fontSize: '12px', color: '#242424' })
+      .text(px, by, text, {
+        fontFamily: FONT_BODY,
+        fontSize: '12px',
+        fontStyle: 'bold',
+        color: '#242424',
+      })
       .setOrigin(0.5)
       .setResolution(RENDER_SCALE)
       .setDepth(31);
