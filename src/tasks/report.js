@@ -5,8 +5,9 @@ import { drawPanel } from '../gfx/panel.js';
 // ---------------------------------------------------------------------------
 // The finish beat: final time on top, the consolidated report in the middle,
 // and a FINISH button (opening-style) on the bottom. FINISH hands off to the
-// results page (OpeningScene 'results' mode: best times + Return home / Run
-// again). The report layout itself is rough for now — to be cleaned up later.
+// results page (OpeningScene 'results' mode). Cartoony pass: bubble title, bold
+// navy outlines on the donut, a clean light report card (iCap) / messy scattered
+// statements (rusty), and larger, bolder text throughout. Rough layout for now.
 // ---------------------------------------------------------------------------
 
 const TAU = Math.PI * 2;
@@ -41,33 +42,59 @@ export function runReport(scene, ui, opts, onFinish) {
         .setResolution(2),
     );
 
-  keep(ui.add.rectangle(0, 0, W, H, 0x0b1020, 0.95).setOrigin(0).setDepth(60).setInteractive());
+  keep(ui.add.rectangle(0, 0, W, H, 0x16294a, 0.96).setOrigin(0).setDepth(60).setInteractive());
 
-  // --- TOP: final time ------------------------------------------------------
-  txt(W / 2, H * 0.05, "This allocation's time", 20, '#9fb0d0', { fontFamily: FONT_TITLE }).setOrigin(
+  // --- TOP: final time in a cartoony outlined pill --------------------------
+  txt(W / 2, H * 0.05, "This allocation's time", 24, '#cfe0ff', { fontFamily: FONT_TITLE }).setOrigin(
     0.5,
   );
-  txt(W / 2, H * 0.115, formatTime(opts.ms), 58, accent, { fontFamily: 'monospace' }).setOrigin(0.5);
+  const pillFill = isICap ? 0x3f83c8 : 0xe0836a;
+  const pillW = 320;
+  const pillH = 92;
+  const pillY = H * 0.145;
+  const pill = keep(ui.add.graphics().setDepth(61));
+  pill.fillStyle(0x173453, 1);
+  pill.fillRoundedRect(W / 2 - pillW / 2, pillY - pillH / 2, pillW, pillH, pillH / 2); // navy border
+  pill.fillStyle(pillFill, 1);
+  pill.fillRoundedRect(
+    W / 2 - pillW / 2 + 5,
+    pillY - pillH / 2 + 5,
+    pillW - 10,
+    pillH - 10,
+    (pillH - 10) / 2,
+  );
+  txt(W / 2, pillY, formatTime(opts.ms), 58, '#ffffff', {
+    fontFamily: FONT_TITLE,
+    stroke: '#173453',
+    strokeThickness: 6,
+  })
+    .setOrigin(0.5)
+    .setDepth(62);
 
   // --- MIDDLE: the consolidated report -------------------------------------
-  txt(W / 2, H * 0.2, `${client}'s portfolio`, 26, '#eef3ff', { fontFamily: FONT_TITLE }).setOrigin(
-    0.5,
-  );
-  txt(
-    W / 2,
-    H * 0.245,
-    isICap
-      ? 'One consolidated report — every holding, one view, updated live.'
-      : 'Statements from every custodian and fund — you reconcile them yourself.',
-    15,
-    accent,
-  ).setOrigin(0.5);
+  txt(W / 2, H * 0.245, `${client}'s portfolio`, 34, '#ffffff', {
+    fontFamily: FONT_TITLE,
+    stroke: '#173453',
+    strokeThickness: 6,
+  }).setOrigin(0.5);
+  // Rusty keeps its subtitle (its report looks fine as-is); iCap drops it.
+  if (!isICap) {
+    txt(
+      W / 2,
+      H * 0.3,
+      'Statements from every custodian and fund — you reconcile them yourself.',
+      20,
+      '#ffcbb5',
+      { fontStyle: 'bold' },
+    ).setOrigin(0.5);
+  }
 
-  // funded allocation donut (left)
+  // funded allocation donut (left), with bold navy outlines + a hole coin.
+  // iCap moves up (subtitle gone); rusty stays where it was (looks fine).
   const cx = W * 0.27;
-  const cy = H * 0.54;
-  const R = 120;
-  const r = 64;
+  const cy = H * (isICap ? 0.55 : 0.58);
+  const R = 128;
+  const r = 70;
   const donut = keep(ui.add.graphics().setDepth(61));
   let a = TOP;
   for (const h of HOLDINGS) {
@@ -78,81 +105,97 @@ export function runReport(scene, ui, opts, onFinish) {
     donut.closePath();
     donut.fillStyle(h.color, 1);
     donut.fillPath();
-    donut.lineStyle(2, 0x0b1020, 1);
+    donut.lineStyle(5, 0x173453, 1);
     donut.strokePath();
     a = a1;
   }
-  txt(cx, cy - 12, TOTAL, 24, '#eef3ff').setOrigin(0.5);
-  txt(cx, cy + 16, 'total value', 13, '#9fb0d0').setOrigin(0.5);
+  keep(ui.add.circle(cx, cy, r - 2, 0x16294a).setStrokeStyle(5, 0x173453).setDepth(61));
+  txt(cx, cy - 14, TOTAL, 30, '#ffffff', { fontFamily: FONT_TITLE }).setOrigin(0.5);
+  txt(cx, cy + 18, 'total value', 17, '#bcd0f0', { fontStyle: 'bold' }).setOrigin(0.5);
 
-  // right side: the report
-  const rx = W * 0.52;
-  const rw = W * 0.44;
-  const boxTop = H * 0.31;
-  const boxH = H * 0.46;
+  // right side card (iCap taller for a bottom buffer; rusty as before).
+  const cardW = W * 0.44;
+  const cardH = H * (isICap ? 0.5 : 0.42);
+  const cardCx = W * 0.7;
+  const cardCy = H * (isICap ? 0.55 : 0.58);
+  const cardLeft = cardCx - cardW / 2;
+  const cardTop = cardCy - cardH / 2;
+  const cardRight = cardCx + cardW / 2;
   if (isICap) {
+    keep(drawPanel(ui, cardCx, cardCy, cardW, cardH, 20).setDepth(61));
+    txt(cardLeft + 30, cardTop + 26, 'Consolidated report', 24, '#1c2b45', { fontFamily: FONT_TITLE });
     keep(
       ui.add
-        .rectangle(rx, boxTop, rw, boxH, 0x141c30, 0.98)
+        .rectangle(cardRight - 100, cardTop + 30, 80, 30, 0x2e7d46)
         .setOrigin(0, 0)
-        .setStrokeStyle(2, 0x2d6cdf)
-        .setDepth(61),
+        .setStrokeStyle(3, 0x173453),
     );
-    txt(rx + 24, boxTop + 22, 'Consolidated report', 20, '#8fd0ff');
-    keep(
-      ui.add
-        .rectangle(rx + rw - 96, boxTop + 34, 76, 22, 0x14361f)
-        .setOrigin(0, 0)
-        .setStrokeStyle(1, 0x2e7d46),
-    );
-    txt(rx + rw - 88, boxTop + 37, 'LIVE', 13, '#8fe0a0');
-    let y = boxTop + 74;
+    txt(cardRight - 60, cardTop + 45, 'LIVE', 17, '#ffffff', { fontStyle: 'bold' }).setOrigin(0.5);
+    let y = cardTop + 84;
     for (const h of HOLDINGS) {
-      if (h.icon) keep(ui.add.image(rx + 32, y + 15, h.icon).setDisplaySize(26, 26));
-      else keep(ui.add.rectangle(rx + 24, y + 9, 14, 14, h.color).setOrigin(0, 0));
-      txt(rx + 52, y, h.label, 17, '#eef3ff');
-      txt(rx + rw - 150, y, `${h.pct}%`, 16, '#9fb0d0');
-      txt(rx + rw - 28, y, h.value, 17, '#dfe7f5').setOrigin(1, 0);
-      y += 42;
+      if (h.icon) keep(ui.add.image(cardLeft + 42, y + 13, h.icon).setDisplaySize(30, 30));
+      else
+        keep(
+          ui.add
+            .rectangle(cardLeft + 30, y + 5, 18, 18, h.color)
+            .setOrigin(0, 0)
+            .setStrokeStyle(2, 0x173453),
+        );
+      txt(cardLeft + 68, y, h.label, 21, '#20304c', { fontStyle: 'bold' });
+      txt(cardRight - 148, y, `${h.pct}%`, 19, '#5a6478', { fontStyle: 'bold' });
+      txt(cardRight - 30, y, h.value, 21, '#20304c', { fontStyle: 'bold' }).setOrigin(1, 0);
+      y += 46;
     }
-    keep(ui.add.rectangle(rx + 24, y + 4, rw - 48, 1, 0x33405e).setOrigin(0, 0));
-    y += 16;
-    txt(rx + 48, y, 'Total', 18, '#eef3ff');
-    txt(rx + rw - 28, y, TOTAL, 20, '#7db4ff').setOrigin(1, 0);
-    txt(rx + 24, y + 40, '5 holdings · 1 report · +8.4% YTD', 15, '#9fb0d0');
+    keep(ui.add.rectangle(cardLeft + 30, y + 4, cardW - 60, 2, 0xb8b0a0).setOrigin(0, 0));
+    y += 18;
+    txt(cardLeft + 54, y, 'Total', 22, '#1c2b45', { fontFamily: FONT_TITLE });
+    txt(cardRight - 30, y, TOTAL, 24, '#1c6bd0', { fontFamily: FONT_TITLE }).setOrigin(1, 0);
+    txt(cardLeft + 30, y + 46, '5 holdings · 1 report · +8.4% YTD', 20, '#3a4560', {
+      fontStyle: 'bold',
+    });
   } else {
     const cards = [
-      { t: 'Custodian A — Public equities', ang: -5, dx: 30, dy: boxTop + 20 },
-      { t: 'Bank — Fixed income', ang: 4, dx: 250, dy: boxTop + 60 },
-      { t: 'Fund admin — Private Equity  (PDF)', ang: -3, dx: 90, dy: boxTop + 180 },
-      { t: 'Alt statement — PENDING', ang: 6, dx: 300, dy: boxTop + 210 },
+      { t: 'Custodian A — Public equities', ang: -5, dx: -110, dy: -92 },
+      { t: 'Bank — Fixed income', ang: 4, dx: 66, dy: -52 },
+      { t: 'Fund admin — Private Equity (PDF)', ang: -3, dx: -72, dy: 58 },
+      { t: 'Alt statement — PENDING', ang: 6, dx: 92, dy: 98 },
     ];
     for (const c of cards) {
       keep(
         ui.add
-          .rectangle(rx + c.dx, c.dy, 250, 120, 0x1e2740, 0.98)
-          .setOrigin(0, 0)
-          .setStrokeStyle(1, 0x46608f)
+          .rectangle(cardCx + c.dx, cardCy + c.dy, 272, 122, 0xf1ece0)
+          .setStrokeStyle(4, 0x173453)
           .setAngle(c.ang)
           .setDepth(61),
       );
-      txt(rx + c.dx + 14, c.dy + 12, c.t, 14, '#c8d6f0', { wordWrap: { width: 220 } }).setAngle(c.ang);
+      txt(cardCx + c.dx, cardCy + c.dy - 40, c.t, 17, '#33405e', {
+        wordWrap: { width: 232 },
+        align: 'center',
+        fontStyle: 'bold',
+      })
+        .setOrigin(0.5, 0)
+        .setAngle(c.ang);
     }
-    txt(rx + rw * 0.42, boxTop + 150, 'RECONCILE\nMANUALLY', 26, '#ff9a9a', { align: 'center' })
+    txt(cardCx, cardCy, 'RECONCILE\nMANUALLY', 30, '#ff9a9a', {
+      align: 'center',
+      fontFamily: FONT_TITLE,
+    })
       .setOrigin(0.5)
       .setAngle(-12);
-    txt(rx + 20, boxTop + boxH - 20, '4 sources · formats vary · hours of reconciliation', 15, '#f0a08a');
+    txt(cardCx, cardCy + cardH * 0.5 + 8, '4 sources · formats vary · hours of reconciliation', 18, '#ffcbb5', {
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
   }
 
   // --- BOTTOM: FINISH -------------------------------------------------------
   const bx = W / 2;
   const by = H * 0.92;
-  const bw = 280;
-  const bh = 72;
+  const bw = 300;
+  const bh = 74;
   const panel = keep(drawPanel(ui, bx, by, bw, bh, 20).setDepth(62));
   const btxt = keep(
     ui.add
-      .text(bx, by, 'FINISH', { fontFamily: FONT_TITLE, fontSize: '34px', color: '#25344c' })
+      .text(bx, by, 'FINISH', { fontFamily: FONT_TITLE, fontSize: '36px', color: '#25344c' })
       .setOrigin(0.5)
       .setResolution(2)
       .setDepth(63),
@@ -180,5 +223,6 @@ export function runReport(scene, ui, opts, onFinish) {
     if (e.key === 'Enter') done();
   };
   hit.once('pointerdown', done);
+  // A short beat so a key still held at the finish line doesn't skip instantly.
   scene.time.delayedCall(300, () => ui.input.keyboard.on('keydown', onKey));
 }

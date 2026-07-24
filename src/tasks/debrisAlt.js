@@ -8,21 +8,21 @@
 //   iCapCar : the car's built-in vacuum clears it instantly (handled elsewhere).
 // ---------------------------------------------------------------------------
 
-// Pile of dirt/garbage clumps over the asset: [dx, dy, w, h, colour]. Browns are
-// dirt; the olive/grey ones read as garbage. Removed one-by-one as you dig.
+// Pile of dirt clumps over the asset: [dx, dy, w, h, colour] — all browns, drawn
+// as chunky, thick-outlined organic blobs and removed one-by-one as you dig.
 const CLUMPS = [
-  [2, -2, 58, 46, 0x5a3d26],
-  [-46, -18, 42, 32, 0x6b4a2f],
-  [-14, -30, 40, 32, 0x7a5636],
-  [20, -26, 42, 32, 0x5a3d26],
-  [48, -6, 36, 30, 0x6b4a2f],
-  [-54, 12, 38, 30, 0x5a3d26],
-  [-20, 4, 46, 36, 0x7a5636],
-  [16, 8, 44, 34, 0x6b4a2f],
-  [48, 22, 36, 30, 0x5a3d26],
-  [-42, 32, 38, 30, 0x6b6b55],
-  [-6, 36, 36, 30, 0x4a4a44],
-  [28, 34, 38, 30, 0x7a5636],
+  [2, -2, 62, 50, 0x8a6540],
+  [-46, -18, 46, 36, 0x6b4a2f],
+  [-14, -30, 44, 36, 0x9a744a],
+  [20, -26, 46, 36, 0x7d5638],
+  [48, -6, 40, 34, 0x6b4a2f],
+  [-54, 12, 42, 34, 0x8a6540],
+  [-20, 4, 50, 40, 0x7d5638],
+  [16, 8, 48, 38, 0x9a744a],
+  [48, 22, 40, 34, 0x6b4a2f],
+  [-42, 32, 42, 34, 0x7d5638],
+  [-6, 36, 40, 34, 0x8a6540],
+  [28, 34, 42, 34, 0x6b4a2f],
 ];
 
 export function runDebrisAltTask(scene, ui, opts, onComplete) {
@@ -52,9 +52,7 @@ export function runDebrisAltTask(scene, ui, opts, onComplete) {
     els.push(ui.add.image(cx, cy, 'icon-pe').setDisplaySize(112, 112));
     if (opts.isICap) return;
     for (const [dx, dy, w, h, color] of CLUMPS) {
-      const clump = ui.add.ellipse(cx + dx, cy + dy, w, h, color).setStrokeStyle(2, 0x2e1f13);
-      clumps.push(clump);
-      els.push(clump);
+      clumps.push(makeBlob(cx + dx, cy + dy, w, h, color));
     }
     // One invisible dig zone over the whole pile; each click knocks a clump off.
     zone = ui.add.rectangle(cx, cy, 200, 160, 0xffffff, 0).setInteractive({ useHandCursor: true });
@@ -62,16 +60,43 @@ export function runDebrisAltTask(scene, ui, opts, onComplete) {
     els.push(zone);
   }
 
+  // An organic lumpy blob (jittered polygon) so each clump looks like a random
+  // chunk of dirt rather than a uniform ellipse. Centred on its own position so
+  // it can scale/spin away when dug.
+  function makeBlob(x, y, w, h, color) {
+    const g = ui.add.graphics().setPosition(x, y);
+    g.fillStyle(color, 1);
+    g.lineStyle(4, 0x241810, 1);
+    g.beginPath();
+    const n = 10;
+    const base = Math.random() * Math.PI * 2;
+    for (let i = 0; i < n; i += 1) {
+      const ang = base + (i / n) * Math.PI * 2;
+      const jr = 0.66 + Math.random() * 0.36;
+      const px = Math.cos(ang) * (w / 2) * jr;
+      const py = Math.sin(ang) * (h / 2) * jr;
+      if (i === 0) g.moveTo(px, py);
+      else g.lineTo(px, py);
+    }
+    g.closePath();
+    g.fillPath();
+    g.strokePath();
+    els.push(g);
+    return g;
+  }
+
   function dig() {
     if (clumps.length === 0) return;
     const c = clumps.pop();
+    // Cartoony "poof": a little overshoot, a hop up, then collapse and fade.
     scene.tweens.add({
       targets: c,
-      scaleX: 0.1,
-      scaleY: 0.1,
+      scale: 0,
+      y: c.y - 14,
+      angle: c.x < cx ? -35 : 35,
       alpha: 0,
-      duration: 130,
-      ease: 'Quad.easeIn',
+      duration: 180,
+      ease: 'Back.easeIn',
       onComplete: () => c.destroy(),
     });
     if (clumps.length === 0) {

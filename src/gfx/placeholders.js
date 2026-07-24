@@ -50,26 +50,33 @@ export const TILESET_KEY = 'tiles-atlas';
 const GROUND_A = 'art-dirt';
 const GROUND_B = 'art-dirt-alt';
 
+// Queue an image only if its texture isn't already loaded — textures persist
+// across scene restarts, so re-running preload on "Run again" would otherwise
+// log "Texture key already in use" for every asset.
+function loadImageOnce(scene, key, url) {
+  if (!scene.textures.exists(key)) scene.load.image(key, url);
+}
+
 // Load the CC0 art. Called from GameScene.preload so the images exist before
 // create() composites the atlas.
 export function preloadArt(scene) {
-  scene.load.image('art-grass', grassUrl);
-  scene.load.image('art-grass-alt', grassAltUrl);
-  scene.load.image('art-dirt', dirtUrl);
-  scene.load.image('art-dirt-alt', dirtAltUrl);
-  scene.load.image('art-tree', treeUrl);
-  scene.load.image('art-bush', bushUrl);
-  scene.load.image('art-concrete', concreteUrl);
-  scene.load.image('art-curb-src', curbUrl);
-  scene.load.image('car-icap', carIcapUrl);
-  scene.load.image('car-old', carOldUrl);
+  loadImageOnce(scene, 'art-grass', grassUrl);
+  loadImageOnce(scene, 'art-grass-alt', grassAltUrl);
+  loadImageOnce(scene, 'art-dirt', dirtUrl);
+  loadImageOnce(scene, 'art-dirt-alt', dirtAltUrl);
+  loadImageOnce(scene, 'art-tree', treeUrl);
+  loadImageOnce(scene, 'art-bush', bushUrl);
+  loadImageOnce(scene, 'art-concrete', concreteUrl);
+  loadImageOnce(scene, 'art-curb-src', curbUrl);
+  loadImageOnce(scene, 'car-icap', carIcapUrl);
+  loadImageOnce(scene, 'car-old', carOldUrl);
 }
 
 // Just the two car sprites — so the opening's "choose your vehicle" screen can
 // show the real cars before GameScene loads the rest of the art.
 export function preloadCars(scene) {
-  scene.load.image('car-icap', carIcapUrl);
-  scene.load.image('car-old', carOldUrl);
+  loadImageOnce(scene, 'car-icap', carIcapUrl);
+  loadImageOnce(scene, 'car-old', carOldUrl);
 }
 
 export const KYC_STRIPE_KEY = 'kyc-stripe';

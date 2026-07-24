@@ -33,7 +33,7 @@ export function runArchitect(scene, ui, opts, onComplete) {
   const W = ui.scale.width;
   const H = ui.scale.height;
   const cx = W / 2;
-  const cy = H * 0.46;
+  const cy = H * 0.47;
   const R = 150;
   const r = 84;
   const isICap = !!opts.isICap;
@@ -68,9 +68,10 @@ export function runArchitect(scene, ui, opts, onComplete) {
     s.ly = cy + Math.sin(s.mid) * (R + 46);
   }
 
-  keep(ui.add.rectangle(0, 0, W, H, 0x0b1020, 0.93).setOrigin(0).setDepth(60));
+  keep(ui.add.rectangle(0, 0, W, H, 0x14233f, 0.94).setOrigin(0).setDepth(60));
   const pie = keep(ui.add.graphics().setDepth(61));
 
+  // Bold, cartoony pie: chunky navy outlines; empty alt slices a lighter slate.
   const drawPie = () => {
     pie.clear();
     for (const s of segs) {
@@ -78,18 +79,23 @@ export function runArchitect(scene, ui, opts, onComplete) {
       pie.arc(cx, cy, R, s.a0, s.a1, false);
       pie.arc(cx, cy, r, s.a1, s.a0, true);
       pie.closePath();
-      pie.fillStyle(s.filled ? s.color : 0x161d30, 1);
+      pie.fillStyle(s.filled ? s.color : 0x2c3a58, 1);
       pie.fillPath();
-      pie.lineStyle(2, 0x0b1020, 1);
+      pie.lineStyle(5, 0x173453, 1);
       pie.strokePath();
     }
   };
   drawPie();
+  // A hole "coin" so the client name sits on a clean disc, not the pie seam.
+  keep(ui.add.circle(cx, cy, r - 3, 0x14233f).setStrokeStyle(5, 0x173453).setDepth(61));
 
-  // Title + hole label.
-  label(cx, H * 0.13, 'Architect the allocation', 30, '#8fd0ff', { fontFamily: FONT_TITLE });
-  label(cx, H * 0.19, `Complete ${client}'s portfolio — add the 3 alternatives.`, 18, '#eef3ff');
-  label(cx, cy, client, 17, '#cfe0ff', { wordWrap: { width: r * 1.6 }, align: 'center' });
+  // Title + hole label (bubble-letter title).
+  label(cx, H * 0.13, 'Architect the allocation', 36, '#ffffff', {
+    fontFamily: FONT_TITLE,
+    stroke: '#173453',
+    strokeThickness: 7,
+  });
+  label(cx, cy, client, 17, '#dfeaff', { fontFamily: FONT_TITLE, wordWrap: { width: r * 1.5 }, align: 'center' });
 
   // Radial segment labels; alt labels start dim and brighten when filled.
   for (const s of segs) {
@@ -98,21 +104,23 @@ export function runArchitect(scene, ui, opts, onComplete) {
     });
   }
 
-  // Empty alt slots: a ring with the alternative's icon, ghosted until filled.
+  // Empty alt slots: a chunky light socket with a navy outline + ghost icon.
   for (const s of segs) {
     if (!s.alt) continue;
-    s.ring = keep(ui.add.circle(s.sx, s.sy, 24).setStrokeStyle(2, 0xffffff, 0.5).setDepth(62));
+    s.ring = keep(
+      ui.add.circle(s.sx, s.sy, 26, 0xeef3ff, 0.92).setStrokeStyle(4, 0x173453).setDepth(62),
+    );
     s.iconImg = keep(
       ui.add
         .image(s.sx, s.sy, `icon-${s.key}`)
-        .setDisplaySize(30, 30)
-        .setTintFill(0xaab6d0)
-        .setAlpha(0.55)
+        .setDisplaySize(32, 32)
+        .setTintFill(0x8492ad)
+        .setAlpha(0.75)
         .setDepth(63),
     );
   }
 
-  const prompt = label(cx, H * 0.9, '', 16, '#9fe0b0');
+  const prompt = label(cx, H * 0.78, '', 22, '#9fe0b0', { fontStyle: 'bold' });
   let complete = false;
 
   const fillSeg = (s) => {
@@ -132,7 +140,7 @@ export function runArchitect(scene, ui, opts, onComplete) {
     }
     if (segs.every((x) => x.filled) && !complete) {
       complete = true;
-      prompt.setText('Allocation complete — press Enter to drive').setColor('#9fe0b0');
+      prompt.setText('Allocation complete, press enter to drive').setColor('#9fe0b0');
     }
   };
 
@@ -165,14 +173,13 @@ export function runArchitect(scene, ui, opts, onComplete) {
   }
 
   if (isICap) {
-    prompt.setText('Press Build to construct the model allocation');
-    const btnPanel = keep(drawPanel(ui, cx, H * 0.8, 300, 62, 20).setDepth(62));
-    const btnText = label(cx, H * 0.8, 'Build with iCapital', 22, '#25344c', {
+    const btnPanel = keep(drawPanel(ui, cx, H * 0.88, 300, 62, 20).setDepth(62));
+    const btnText = label(cx, H * 0.88, 'Build with iCapital', 22, '#25344c', {
       fontFamily: FONT_TITLE,
     }).setDepth(63);
     const hit = keep(
       ui.add
-        .rectangle(cx, H * 0.8, 300, 62, 0x000000, 0)
+        .rectangle(cx, H * 0.88, 300, 62, 0x000000, 0)
         .setDepth(63)
         .setInteractive({ useHandCursor: true }),
     );
@@ -192,15 +199,18 @@ export function runArchitect(scene, ui, opts, onComplete) {
     const tray = segs.filter((s) => s.alt);
     tray.forEach((s, i) => {
       const tx = cx + (i - (tray.length - 1) / 2) * 190;
-      const ty = H * 0.82;
-      const token = ui.add.container(tx, ty).setDepth(63).setSize(68, 68);
-      const body = ui.add.circle(0, 0, 32, 0x141c30).setStrokeStyle(3, s.color);
+      const ty = H * 0.88;
+      const token = ui.add.container(tx, ty).setDepth(63).setSize(72, 72);
+      // Chunky bubble token: white disc, thick navy outline, a coloured inner
+      // ring for the alt, and its icon on top.
+      const body = ui.add.circle(0, 0, 34, 0xeef3ff).setStrokeStyle(4, 0x173453);
+      const ring = ui.add.circle(0, 0, 27).setStrokeStyle(4, s.color);
       const ic = ui.add.image(0, 0, `icon-${s.key}`).setDisplaySize(40, 40);
       const cap = ui.add
-        .text(0, 46, s.label, { fontFamily: FONT_BODY, fontSize: '12px', color: '#9fb0d0' })
+        .text(0, 50, s.label, { fontFamily: FONT_TITLE, fontSize: '13px', color: '#eef3ff' })
         .setOrigin(0.5)
         .setResolution(2);
-      token.add([body, ic, cap]);
+      token.add([body, ring, ic, cap]);
       token.setData('key', s.key);
       token.setData('home', { x: tx, y: ty });
       token.setInteractive();

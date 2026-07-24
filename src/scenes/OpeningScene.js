@@ -275,6 +275,9 @@ export default class OpeningScene extends Phaser.Scene {
 
   showTitle() {
     this.clearScreen(); // so returning here (e.g. "Return home") wipes the prior page
+    // Every landing on the title — a fresh launch or a "Return home" — clears the
+    // best-times scoreboard. ("Run again" goes to car select, so it's preserved.)
+    resetBestTimes();
     this.state = 'title';
     const { W, H } = this;
     // bubble-letter title: white fill + thick navy outline + soft shadow, so it
@@ -528,7 +531,7 @@ export default class OpeningScene extends Phaser.Scene {
   }
 
   goHome() {
-    resetBestTimes(); // "start from the very beginning, reset all timers"
+    // showTitle() clears the best times; just wipe the names and head back.
     this.managerName = undefined;
     this.clientName = undefined;
     this.clientFood = undefined;

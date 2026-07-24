@@ -28,21 +28,44 @@ export function runCagedAltTask(scene, ui, opts, onComplete) {
   // The caged asset is a triangle behind cage bars, shown from the first prompt;
   // the bars fade away when the clues are cracked.
   function build() {
-    // The caged asset is its real icon (Real Assets) behind the bars.
+    // The caged asset is its real icon (Real Assets) behind clean steel bars.
     const asset = ui.add.image(cx, cy, 'icon-ra').setDisplaySize(110, 110);
     els.push(asset);
-    const top = ui.add.rectangle(cx, cy - 68, 156, 12, 0x2b3346).setStrokeStyle(1, 0x11151f);
-    const bot = ui.add.rectangle(cx, cy + 68, 156, 12, 0x2b3346).setStrokeStyle(1, 0x11151f);
-    cageParts.push(top, bot);
-    for (let i = -2; i <= 2; i += 1) {
-      const bar = ui.add.rectangle(cx + i * 34, cy, 8, 132, 0x2b3346).setStrokeStyle(1, 0x11151f);
-      cageParts.push(bar);
-    }
-    els.push(...cageParts);
+    const STEEL = 0x8892a6;
+    const OUTLINE = 0x173453;
+    const LW = 3;
+    const fullW = 172;
+    const barTh = 16;
+    const barW = 10;
+    const barH = 148;
+    const gap = 36;
+    const rects = [
+      [cx - fullW / 2, cy - 72 - barTh / 2, fullW, barTh], // top rail
+      [cx - fullW / 2, cy + 72 - barTh / 2, fullW, barTh], // bottom rail
+    ];
+    for (let i = -2; i <= 2; i += 1) rects.push([cx + i * gap - barW / 2, cy - barH / 2, barW, barH]);
+    // One graphics for the whole cage: an inflated navy silhouette (the outline)
+    // with the steel fills on top. The fills cover every joint, so where the bars
+    // meet the rails there's no internal border — it reads as one shape.
+    const cage = ui.add.graphics();
+    cage.fillStyle(OUTLINE, 1);
+    rects.forEach(([x, y, w, h]) => cage.fillRect(x - LW, y - LW, w + 2 * LW, h + 2 * LW));
+    cage.fillStyle(STEEL, 1);
+    rects.forEach(([x, y, w, h]) => cage.fillRect(x, y, w, h));
+    cageParts.push(cage);
+    els.push(cage);
   }
 
+  // Lift the whole cage up and off the asset, then fade — reads as the cage
+  // being pulled open. (Called immediately for iCap; on solve for the old car.)
   function openCage() {
-    cageParts.forEach((p) => p.setAlpha(0.12));
+    scene.tweens.add({
+      targets: cageParts,
+      y: '-=260',
+      alpha: 0,
+      duration: 620,
+      ease: 'Cubic.easeIn',
+    });
   }
 
   function finish() {

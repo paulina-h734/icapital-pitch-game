@@ -102,6 +102,17 @@ export default class GameScene extends Phaser.Scene {
     // Car + client identity are chosen in the opening sequence (OpeningScene).
     this.isICap = !!this.registry.get('isICap');
 
+    // Reset per-run state BEFORE drawing the map. The scene instance is reused
+    // across restarts (Run again / Return home), so a stale materialised overpass
+    // (overpassActive still true) would otherwise stamp the concrete into the new
+    // run before these flags were cleared.
+    this.facing = 'up';
+    this.overview = false;
+    this.editing = false;
+    this.hideOverpass = false; // editor: hide the overpass overlay to edit beneath
+    this.overpassActive = false;
+    this.interacting = false;
+
     this.drawMap();
     this.addBorderRounding();
     this.addOverpassCurbs();
@@ -111,14 +122,7 @@ export default class GameScene extends Phaser.Scene {
     this.setupCamera();
     this.setupInput();
 
-    this.facing = 'up';
-    this.overview = false;
-    this.editing = false;
-    this.hideOverpass = false; // editor: hide the overpass overlay to edit beneath
-
     // Task / collection state.
-    this.overpassActive = false;
-    this.interacting = false;
     this.collected = new Set();
     this.inventory = [];
     // The run clock spans the Architect stage + the drive: it starts as the
@@ -715,7 +719,7 @@ export default class GameScene extends Phaser.Scene {
         if (this.isICap) {
           if (!this.overpassActive) {
             this.activateOverpass();
-            this.showGateBubble(button, 'iCapCar recognized — overpass up!');
+            this.showGateBubble(button, 'iCapCar recognized, materializing overpass');
           }
         } else {
           this.startOverpass(button);
