@@ -1,0 +1,4 @@
+/* Bundled offline fonts (Baloo 2 title, Nunito Sans body). */
+@font-face{font-family:'Baloo 2';font-style:normal;font-weight:700;font-display:swap;src:url('./fonts/Baloo2-700.woff2') format('woff2');}
+@font-face{font-family:'Nunito Sans';font-style:normal;font-weight:400;font-display:swap;src:url('./fonts/NunitoSans-400.woff2') format('woff2');}
+@font-face{font-family:'Nunito Sans';font-style:normal;font-weight:700;font-display:swap;src:url('./fonts/NunitoSans-700.woff2') format('woff2');}

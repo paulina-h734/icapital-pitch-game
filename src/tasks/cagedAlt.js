@@ -28,15 +28,14 @@ export function runCagedAltTask(scene, ui, opts, onComplete) {
   // The caged asset is a triangle behind cage bars, shown from the first prompt;
   // the bars fade away when the clues are cracked.
   function build() {
-    const asset = ui.add
-      .triangle(cx, cy, 0, -46, 48, 44, -48, 44, 0xf0932b)
-      .setStrokeStyle(3, 0x1a1a1a);
+    // The caged asset is its real icon (Real Assets) behind the bars.
+    const asset = ui.add.image(cx, cy, 'icon-ra').setDisplaySize(110, 110);
     els.push(asset);
-    const top = ui.add.rectangle(cx, cy - 58, 132, 12, 0x2b3346).setStrokeStyle(1, 0x11151f);
-    const bot = ui.add.rectangle(cx, cy + 58, 132, 12, 0x2b3346).setStrokeStyle(1, 0x11151f);
+    const top = ui.add.rectangle(cx, cy - 68, 156, 12, 0x2b3346).setStrokeStyle(1, 0x11151f);
+    const bot = ui.add.rectangle(cx, cy + 68, 156, 12, 0x2b3346).setStrokeStyle(1, 0x11151f);
     cageParts.push(top, bot);
     for (let i = -2; i <= 2; i += 1) {
-      const bar = ui.add.rectangle(cx + i * 28, cy, 8, 112, 0x2b3346).setStrokeStyle(1, 0x11151f);
+      const bar = ui.add.rectangle(cx + i * 34, cy, 8, 132, 0x2b3346).setStrokeStyle(1, 0x11151f);
       cageParts.push(bar);
     }
     els.push(...cageParts);

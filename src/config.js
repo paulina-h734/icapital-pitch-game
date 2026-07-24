@@ -5,6 +5,12 @@
 
 export const TILE_SIZE = 32;
 
+// Typography — bundled offline (src/assets/fonts.css). Baloo 2 is the fun
+// display face for titles; Nunito Sans carries body/UI text. system-ui is the
+// fallback until/if the woff2 loads.
+export const FONT_TITLE = "'Baloo 2', system-ui, sans-serif";
+export const FONT_BODY = "'Nunito Sans', system-ui, sans-serif";
+
 // How many tiles the camera shows around the driver. Intentionally tight — an
 // open-world (Pokémon/Stardew) camera where the zoom itself hides the shape of
 // the map. Obscurity comes from the zoom + open clearings, NOT a fog overlay.

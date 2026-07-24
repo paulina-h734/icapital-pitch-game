@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { FONT_TITLE, FONT_BODY } from '../config.js';
 
 // ---------------------------------------------------------------------------
 // OpeningScene — the pitch opening, run before GameScene. Sequence:
@@ -34,7 +35,7 @@ export default class OpeningScene extends Phaser.Scene {
 
   label(x, y, str, size, color, extra = {}) {
     const t = this.add
-      .text(x, y, str, { fontFamily: 'sans-serif', fontSize: `${size}px`, color, ...extra })
+      .text(x, y, str, { fontFamily: FONT_BODY, fontSize: `${size}px`, color, ...extra })
       .setOrigin(0.5)
       .setResolution(2);
     this.els.push(t);
@@ -45,8 +46,8 @@ export default class OpeningScene extends Phaser.Scene {
 
   showTitle() {
     this.state = 'title';
-    this.label(this.W / 2, this.H * 0.34, 'iCapital', 46, '#8fd0ff');
-    this.label(this.W / 2, this.H * 0.44, 'Drive the Journey', 30, '#eef3ff');
+    this.label(this.W / 2, this.H * 0.34, 'iCapital', 46, '#8fd0ff', { fontFamily: FONT_TITLE });
+    this.label(this.W / 2, this.H * 0.44, 'Drive the Journey', 30, '#eef3ff', { fontFamily: FONT_TITLE });
     this.label(this.W / 2, this.H * 0.62, 'Press Enter to begin', 18, '#9fe0b0');
   }
 
@@ -55,7 +56,7 @@ export default class OpeningScene extends Phaser.Scene {
     this.state = state;
     this.value = '';
     this.onSubmit = onSubmit;
-    this.label(this.W / 2, this.H * 0.32, title, 26, '#8fd0ff');
+    this.label(this.W / 2, this.H * 0.32, title, 26, '#8fd0ff', { fontFamily: FONT_TITLE });
     this.label(this.W / 2, this.H * 0.42, question, 24, '#eef3ff');
     this.valueText = this.label(this.W / 2, this.H * 0.54, '█', 32, '#ffd27a', {
       fontFamily: 'monospace',
@@ -91,7 +92,9 @@ export default class OpeningScene extends Phaser.Scene {
   chooseVehicle() {
     this.clearScreen();
     this.state = 'car';
-    this.label(this.W / 2, this.H * 0.18, 'Choose your vehicle', 30, '#eef3ff');
+    this.label(this.W / 2, this.H * 0.18, 'Choose your vehicle', 30, '#eef3ff', {
+      fontFamily: FONT_TITLE,
+    });
     this.carCard(this.W / 2 - 175, 0xb5442f, 'Rusty car', 'Going it alone — every step by hand.', false);
     this.carCard(this.W / 2 + 175, 0x2d6cdf, 'iCapCar', 'On the iCapital platform — it does the work.', true);
   }
@@ -118,7 +121,9 @@ export default class OpeningScene extends Phaser.Scene {
     const body = this.isICap
       ? 'iCapCar can unlock special abilities — follow the iGPS to find them all.'
       : 'You have unlocked the old map (very crumpled). You are on your own out there.';
-    this.label(this.W / 2, this.H * 0.38, title, 28, this.isICap ? '#7db4ff' : '#f0a08a');
+    this.label(this.W / 2, this.H * 0.38, title, 28, this.isICap ? '#7db4ff' : '#f0a08a', {
+      fontFamily: FONT_TITLE,
+    });
     this.label(this.W / 2, this.H * 0.5, body, 20, '#eef3ff', { wordWrap: { width: 620 }, align: 'center' });
     this.label(
       this.W / 2,
@@ -134,7 +139,9 @@ export default class OpeningScene extends Phaser.Scene {
   showBriefing() {
     this.clearScreen();
     this.state = 'brief';
-    this.label(this.W / 2, this.H * 0.12, 'iGPS · your route', 30, '#7db4ff');
+    this.label(this.W / 2, this.H * 0.12, 'iGPS · your route', 30, '#7db4ff', {
+      fontFamily: FONT_TITLE,
+    });
     this.label(
       this.W / 2,
       this.H * 0.19,

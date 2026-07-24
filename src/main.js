@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { TILE_SIZE, VIEW_TILES_X, VIEW_TILES_Y, RENDER_SCALE } from './config.js';
+import './assets/fonts.css'; // bundled offline title/body fonts
 import OpeningScene from './scenes/OpeningScene.js';
 import GameScene from './scenes/GameScene.js';
 import UIScene from './scenes/UIScene.js';
@@ -26,9 +27,20 @@ const config = {
   scene: [OpeningScene, GameScene, UIScene],
 };
 
-const game = new Phaser.Game(config);
+function boot() {
+  const game = new Phaser.Game(config);
+  // Expose in dev for debugging / preview inspection.
+  if (import.meta.env?.DEV) {
+    window.__game = game;
+  }
+}
 
-// Expose in dev for debugging / preview inspection.
-if (import.meta.env?.DEV) {
-  window.__game = game;
+// Start once the bundled fonts are ready — Phaser bakes text into textures at
+// creation and won't re-layout when a webfont arrives later, so a late font
+// would leave the first screens in the fallback face.
+const needed = ["700 1em 'Baloo 2'", "400 1em 'Nunito Sans'", "700 1em 'Nunito Sans'"];
+if (document.fonts && document.fonts.load) {
+  Promise.all(needed.map((f) => document.fonts.load(f))).then(boot, boot);
+} else {
+  boot();
 }

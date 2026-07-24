@@ -1,4 +1,5 @@
 import { formatTime } from '../bestTimes.js';
+import { FONT_TITLE, FONT_BODY } from '../config.js';
 
 // ---------------------------------------------------------------------------
 // The finish payoff, in two beats:
@@ -20,9 +21,9 @@ const TOP = -Math.PI / 2;
 const HOLDINGS = [
   { label: 'Stocks', pct: 40, color: 0x3f5c86, value: '$1.00M' },
   { label: 'Bonds', pct: 25, color: 0x51748f, value: '$625K' },
-  { label: 'Private Equity', pct: 12, color: 0x7db4ff, value: '$300K' },
-  { label: 'Private Credit', pct: 12, color: 0x8fd0a0, value: '$300K' },
-  { label: 'Real Assets', pct: 11, color: 0xf0b46a, value: '$275K' },
+  { label: 'Private Equity', pct: 12, color: 0x7db4ff, value: '$300K', icon: 'icon-pe' },
+  { label: 'Private Credit', pct: 12, color: 0x8fd0a0, value: '$300K', icon: 'icon-pc' },
+  { label: 'Real Assets', pct: 11, color: 0xf0b46a, value: '$275K', icon: 'icon-ra' },
 ];
 const TOTAL = '$2.5M';
 
@@ -44,7 +45,7 @@ export function runReport(scene, ui, opts, onAgain) {
     const txt = (x, y, str, size, color, extra = {}) =>
       keep(
         ui.add
-          .text(x, y, str, { fontFamily: 'sans-serif', fontSize: `${size}px`, color, ...extra })
+          .text(x, y, str, { fontFamily: FONT_BODY, fontSize: `${size}px`, color, ...extra })
           .setResolution(2),
       );
     return { keep, txt, destroy: () => els.forEach((o) => o && o.scene && o.destroy()) };
@@ -58,7 +59,7 @@ export function runReport(scene, ui, opts, onAgain) {
     const dim = L.keep(
       ui.add.rectangle(0, 0, W, H, 0x0b1020, 0.95).setOrigin(0).setDepth(60).setInteractive(),
     );
-    L.txt(W / 2, H * 0.33, 'Your time', 22, '#9fb0d0').setOrigin(0.5);
+    L.txt(W / 2, H * 0.33, 'Your time', 22, '#9fb0d0', { fontFamily: FONT_TITLE }).setOrigin(0.5);
     L.txt(W / 2, H * 0.45, formatTime(opts.ms), 66, accent, { fontFamily: 'monospace' }).setOrigin(0.5);
     L.txt(W / 2, H * 0.55, isICap ? 'iCapCar' : 'Rusty car', 18, accent).setOrigin(0.5);
     const prompt = L.txt(
@@ -92,7 +93,9 @@ export function runReport(scene, ui, opts, onAgain) {
     const L = layer();
     L.keep(ui.add.rectangle(0, 0, W, H, 0x0b1020, 0.95).setOrigin(0).setDepth(60));
 
-    L.txt(W / 2, 48, `${client}'s portfolio`, 30, '#eef3ff').setOrigin(0.5);
+    L.txt(W / 2, 48, `${client}'s portfolio`, 30, '#eef3ff', { fontFamily: FONT_TITLE }).setOrigin(
+      0.5,
+    );
     L.txt(
       W / 2,
       88,
@@ -146,8 +149,9 @@ export function runReport(scene, ui, opts, onAgain) {
       L.txt(rx + rw - 88, 187, 'LIVE', 13, '#8fe0a0');
       let y = 224;
       for (const h of HOLDINGS) {
-        L.keep(ui.add.rectangle(rx + 24, y + 9, 14, 14, h.color).setOrigin(0, 0));
-        L.txt(rx + 48, y, h.label, 17, '#eef3ff');
+        if (h.icon) L.keep(ui.add.image(rx + 32, y + 15, h.icon).setDisplaySize(26, 26));
+        else L.keep(ui.add.rectangle(rx + 24, y + 9, 14, 14, h.color).setOrigin(0, 0));
+        L.txt(rx + 52, y, h.label, 17, '#eef3ff');
         L.txt(rx + rw - 150, y, `${h.pct}%`, 16, '#9fb0d0');
         L.txt(rx + rw - 28, y, h.value, 17, '#dfe7f5').setOrigin(1, 0);
         y += 42;

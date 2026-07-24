@@ -66,10 +66,19 @@ export const GRASS_CORNER_KEY = 'grass-round';
 export const DIRT_CORNER_KEY = 'dirt-round';
 export const CURB_KEY = 'curb';
 
+// The 3 collectible alternatives: which map POI, display name, icon texture, and
+// colour. Used by the map markers, the drive-through toast, and the inventory.
+export const ASSETS = [
+  { alt: 'alt-debris', key: 'pe', name: 'Private Equity', icon: 'icon-pe', color: 0x7db4ff },
+  { alt: 'alt-disguise', key: 'pc', name: 'Private Credit', icon: 'icon-pc', color: 0x8fd0a0 },
+  { alt: 'alt-caged', key: 'ra', name: 'Real Assets', icon: 'icon-ra', color: 0xf0b46a },
+];
+
 export function makePlaceholderTextures(scene) {
   makeTilesAtlas(scene);
   makeKycBarrierTexture(scene);
   makeCurbTexture(scene);
+  makeAssetIcons(scene);
   // Grass wedge rounds the driving area's OUTER (convex) corners; dirt wedge
   // rounds its INNER (concave) corners where grass pokes into the road.
   makeCornerOverlay(scene, GRASS_CORNER_KEY, 'art-grass');
@@ -118,6 +127,189 @@ function makeKycBarrierTexture(scene) {
     ctx.stroke();
   }
   tex.refresh();
+}
+
+// Flat-vector icons for the 3 alternatives, drawn on transparent canvases:
+// Private Equity = briefcase, Private Credit = coin, Real Assets = building.
+// Navy detailing on the asset's colour, matching the game's palette.
+const ICON_DARK = '#152036';
+function makeAssetIcons(scene) {
+  makeIcon(scene, 'icon-pe', '#7db4ff', drawBriefcase);
+  makeIcon(scene, 'icon-pc', '#8fd0a0', drawCoin);
+  makeIcon(scene, 'icon-ra', '#f0b46a', drawBuilding);
+  makeIcon(scene, 'icon-hat', '#2b2b3a', drawHat); // disguise pieces (Private Credit)
+  makeIcon(scene, 'icon-mustache', '#2b2320', drawMustache);
+  makeIcon(scene, 'overpass-btn', '#d84b3a', drawBtnUp); // overpass button (raised)
+  makeIcon(scene, 'overpass-btn-down', '#d84b3a', drawBtnDown); // overpass button (pressed)
+  makeIcon(scene, 'finish-target', '#d84b3a', drawBullseye);
+}
+
+function makeIcon(scene, key, fill, draw) {
+  if (scene.textures.exists(key)) return;
+  const S = 64;
+  const tex = scene.textures.createCanvas(key, S, S);
+  const ctx = tex.getContext();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  draw(ctx, S, fill, ICON_DARK);
+  tex.refresh();
+}
+
+function drawBriefcase(ctx, S, fill, dark) {
+  const c = S / 2;
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = S * 0.06;
+  ctx.beginPath();
+  ctx.arc(c, S * 0.32, S * 0.13, Math.PI * 1.08, Math.PI * -0.08); // handle
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.roundRect(S * 0.16, S * 0.34, S * 0.68, S * 0.44, S * 0.07);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.lineWidth = S * 0.05;
+  ctx.stroke();
+  ctx.fillStyle = dark;
+  ctx.fillRect(S * 0.16, S * 0.5, S * 0.68, S * 0.045); // latch strip
+  ctx.beginPath();
+  ctx.roundRect(c - S * 0.055, S * 0.465, S * 0.11, S * 0.1, S * 0.02); // clasp
+  ctx.fill();
+}
+
+function drawCoin(ctx, S, fill, dark) {
+  const c = S / 2;
+  const r = S * 0.33;
+  ctx.beginPath();
+  ctx.arc(c, c, r, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = S * 0.055;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(c, c, r * 0.72, 0, Math.PI * 2);
+  ctx.lineWidth = S * 0.03;
+  ctx.stroke();
+  ctx.fillStyle = dark;
+  ctx.font = `700 ${S * 0.42}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('$', c, c + S * 0.03);
+}
+
+function drawBuilding(ctx, S, fill, dark) {
+  ctx.beginPath();
+  ctx.roundRect(S * 0.26, S * 0.2, S * 0.48, S * 0.6, S * 0.04);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = S * 0.05;
+  ctx.stroke();
+  ctx.fillStyle = dark;
+  const cols = [0.34, 0.53];
+  const rows = [0.28, 0.44];
+  const w = S * 0.1;
+  for (const gx of cols) for (const gy of rows) ctx.fillRect(S * gx, S * gy, w, w);
+  ctx.beginPath();
+  ctx.roundRect(S * 0.43, S * 0.62, S * 0.14, S * 0.18, S * 0.02); // door
+  ctx.fill();
+}
+
+function drawHat(ctx, S, fill) {
+  const c = S / 2;
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.ellipse(c, S * 0.66, S * 0.42, S * 0.11, 0, 0, Math.PI * 2); // brim
+  ctx.fill();
+  ctx.beginPath();
+  ctx.roundRect(S * 0.29, S * 0.22, S * 0.42, S * 0.46, S * 0.04); // crown
+  ctx.fill();
+  ctx.fillStyle = '#6b6b82';
+  ctx.fillRect(S * 0.29, S * 0.55, S * 0.42, S * 0.07); // band
+}
+
+// Overpass button, two baked states: raised (up) and pressed-in (down). Same
+// dark socket; the face + chevron sit high when up, low + dimmed when down.
+function drawBtnUp(ctx, S, fill, dark) {
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.roundRect(S * 0.14, S * 0.42, S * 0.72, S * 0.42, S * 0.1); // socket
+  ctx.fill();
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.roundRect(S * 0.16, S * 0.16, S * 0.68, S * 0.46, S * 0.1); // raised face
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.beginPath();
+  ctx.roundRect(S * 0.2, S * 0.2, S * 0.6, S * 0.12, S * 0.06); // top highlight
+  ctx.fill();
+  btnChevron(ctx, S, dark, 0.48);
+}
+
+function drawBtnDown(ctx, S, fill, dark) {
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.roundRect(S * 0.14, S * 0.42, S * 0.72, S * 0.42, S * 0.1); // socket
+  ctx.fill();
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.roundRect(S * 0.18, S * 0.36, S * 0.64, S * 0.4, S * 0.09); // pressed-in face (low)
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.24)';
+  ctx.beginPath();
+  ctx.roundRect(S * 0.18, S * 0.36, S * 0.64, S * 0.4, S * 0.09); // shadow (dimmed)
+  ctx.fill();
+  btnChevron(ctx, S, dark, 0.64);
+}
+
+function btnChevron(ctx, S, dark, yc) {
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = S * 0.07;
+  ctx.beginPath();
+  ctx.moveTo(S * 0.34, S * yc);
+  ctx.lineTo(S * 0.5, S * (yc - 0.16));
+  ctx.lineTo(S * 0.66, S * yc);
+  ctx.stroke();
+}
+
+// Bullseye/target for the finish.
+function drawBullseye(ctx, S) {
+  const c = S / 2;
+  const rings = [
+    [0.46, '#d84b3a'],
+    [0.36, '#f4efe6'],
+    [0.26, '#d84b3a'],
+    [0.16, '#f4efe6'],
+    [0.07, '#d84b3a'],
+  ];
+  for (const [rr, col] of rings) {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(c, c, S * rr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.lineWidth = S * 0.03;
+  ctx.beginPath();
+  ctx.arc(c, c, S * 0.46, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawMustache(ctx, S, fill) {
+  const c = S / 2;
+  const y = S * 0.46;
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.moveTo(c, y + S * 0.02);
+  ctx.quadraticCurveTo(c - S * 0.14, y - S * 0.1, c - S * 0.3, y - S * 0.06);
+  ctx.quadraticCurveTo(c - S * 0.46, y - S * 0.02, c - S * 0.42, y + S * 0.12);
+  ctx.quadraticCurveTo(c - S * 0.3, y + S * 0.06, c - S * 0.16, y + S * 0.1);
+  ctx.quadraticCurveTo(c - S * 0.06, y + S * 0.12, c, y + S * 0.08);
+  ctx.quadraticCurveTo(c + S * 0.06, y + S * 0.12, c + S * 0.16, y + S * 0.1);
+  ctx.quadraticCurveTo(c + S * 0.3, y + S * 0.06, c + S * 0.42, y + S * 0.12);
+  ctx.quadraticCurveTo(c + S * 0.46, y - S * 0.02, c + S * 0.3, y - S * 0.06);
+  ctx.quadraticCurveTo(c + S * 0.14, y - S * 0.1, c, y + S * 0.02);
+  ctx.closePath();
+  ctx.fill();
 }
 
 // Composite the 6-tile atlas onto a canvas texture from the loaded sprites.

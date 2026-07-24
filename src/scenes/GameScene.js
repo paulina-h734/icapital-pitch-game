@@ -8,6 +8,8 @@ import {
   CAM_CROSS_SMOOTH,
   CORRIDOR_RATIO,
   CORRIDOR_SCAN_CAP,
+  FONT_BODY,
+  FONT_TITLE,
 } from '../config.js';
 import {
   makePlaceholderTextures,
@@ -18,6 +20,7 @@ import {
   GRASS_CORNER_KEY,
   DIRT_CORNER_KEY,
   CURB_KEY,
+  ASSETS,
 } from '../gfx/placeholders.js';
 import { TILES, MAP_W, MAP_H } from '../map/level1.js';
 import { loadMap, saveMap } from '../map/mapStore.js';
@@ -99,6 +102,7 @@ export default class GameScene extends Phaser.Scene {
     this.addBorderRounding();
     this.addOverpassCurbs();
     this.drawPois();
+    this.drawForestSign();
     this.createDriver();
     this.setupCamera();
     this.setupInput();
@@ -334,44 +338,57 @@ export default class GameScene extends Phaser.Scene {
     const s = TILE_SIZE * 0.4;
     let marker;
     switch (p.type) {
-      case 'alt-debris': // ◇ diamond
-        marker = this.add.rectangle(px, py, s * 1.4, s * 1.4, POI_COLORS.alt).setAngle(45);
+      case 'alt-debris':
+      case 'alt-disguise':
+      case 'alt-caged': {
+        // Representative icon (briefcase / coin / building) for the alternative.
+        const asset = ASSETS.find((a) => a.alt === p.type);
+        marker = this.add.image(px, py, asset.icon).setDisplaySize(TILE_SIZE * 1.5, TILE_SIZE * 1.5);
         break;
-      case 'alt-disguise': // ○ circle
-        marker = this.add.circle(px, py, s, POI_COLORS.alt);
-        break;
-      case 'alt-caged': // △ triangle
-        marker = this.add.triangle(px, py, 0, s, s, -s, -s, -s, POI_COLORS.alt);
-        break;
+      }
       case 'kyc1':
       case 'kyc2':
         marker = this.add.rectangle(px, py, TILE_SIZE * 0.9, TILE_SIZE * 0.6, POI_COLORS.kyc);
         break;
       case 'finish':
-        marker = this.add.rectangle(px, py, TILE_SIZE * 0.7, TILE_SIZE * 0.7, POI_COLORS.finish);
+        marker = this.add.image(px, py, 'finish-target').setDisplaySize(TILE_SIZE * 1.7, TILE_SIZE * 1.7);
         break;
       case 'overpass':
-        marker = this.add.rectangle(px, py, TILE_SIZE * 0.6, TILE_SIZE * 0.6, POI_COLORS.overpass);
+        // Bigger, raised a little above its tile so it reads as a button.
+        marker = this.add
+          .image(px, py - TILE_SIZE * 0.35, 'overpass-btn')
+          .setDisplaySize(TILE_SIZE * 1.6, TILE_SIZE * 1.6);
         break;
       case 'start':
       default:
         marker = this.add.rectangle(px, py, TILE_SIZE * 0.6, TILE_SIZE * 0.6, POI_COLORS.start);
         break;
     }
-    marker.setStrokeStyle(2, 0x1a1a1a).setDepth(5);
+    marker.setDepth(5);
+    if (marker.setStrokeStyle) marker.setStrokeStyle(2, 0x1a1a1a); // shapes only, not the icon images
+    // KYC checkpoints are drawn as the sliding gate (createBarrier); the start
+    // never needs a marker (you never return). Hide both.
+    if (p.type === 'kyc1' || p.type === 'kyc2' || p.type === 'start') marker.setVisible(false);
 
     // The disguise alt wears its disguise on the map: a little hat + moustache
     // that fade away once the asset has been inspected & collected.
     const parts = [];
     if (p.type === 'alt-disguise') {
-      const hat = this.add.rectangle(px, py - s * 0.7, s * 1.2, s * 0.6, 0x2b3346).setDepth(6);
-      const moustache = this.add.rectangle(px, py + s * 0.35, s * 1.0, s * 0.35, 0x2b2320).setDepth(6);
+      const iz = TILE_SIZE * 1.5; // matches the asset icon marker
+      const hat = this.add
+        .image(px, py - iz * 0.42, 'icon-hat')
+        .setDisplaySize(iz * 0.92, iz * 0.62)
+        .setDepth(6);
+      const moustache = this.add
+        .image(px, py + iz * 0.14, 'icon-mustache')
+        .setDisplaySize(iz * 0.64, iz * 0.34)
+        .setDepth(6);
       parts.push(hat, moustache);
     }
 
     const label = this.add
       .text(px, py - TILE_SIZE * 0.75, p.label, {
-        fontFamily: 'sans-serif',
+        fontFamily: FONT_BODY,
         fontSize: '11px',
         color: '#ffffff',
         backgroundColor: '#00000088',
@@ -385,6 +402,40 @@ export default class GameScene extends Phaser.Scene {
     this.poiObjects[p.type] = { marker, label, parts };
   }
 
+  // Etch signs into the dirt at the three-way junction: DOCUMENT CENTER in the
+  // middle, "subscription route" (the forest maze) to the left, "express route"
+  // (the overpass) to the right. Dark brown, low on the ground.
+  drawForestSign() {
+    const BROWN = 0x5a3a1e;
+    const label = (tx, ty, text) =>
+      this.add
+        .text(tx, ty, text, {
+          fontFamily: FONT_TITLE,
+          fontSize: '14px',
+          color: '#5a3a1e',
+          align: 'center',
+          lineSpacing: 1,
+        })
+        .setOrigin(0.5)
+        .setAlpha(0.5)
+        .setResolution(RENDER_SCALE)
+        .setDepth(1);
+    const arrow = (x, y, dir) =>
+      this.add
+        .triangle(x, y, 0, -11, 0, 11, dir * 20, 0, BROWN)
+        .setAlpha(0.5)
+        .setDepth(1);
+
+    const mid = this.tileToWorld(33, 63);
+    label(mid.px, mid.py, 'DOCUMENT\nCENTER');
+    const sub = this.tileToWorld(25, 61);
+    label(sub.px, sub.py, 'SUBSCRIPTION\nROUTE');
+    arrow(sub.px - 70, sub.py, -1);
+    const exp = this.tileToWorld(43, 63);
+    label(exp.px, exp.py, 'EXPRESS\nROUTE');
+    arrow(exp.px + 62, exp.py, 1);
+  }
+
   // Editor: move a POI to a new tile (updates data + marker + label).
   movePoi(type, x, y) {
     const poi = this.pois.find((p) => p.type === type);
@@ -396,9 +447,9 @@ export default class GameScene extends Phaser.Scene {
     obj.marker.setPosition(px, py);
     obj.label.setPosition(px, py - TILE_SIZE * 0.75);
     if (obj.parts?.length) {
-      const s = TILE_SIZE * 0.4;
-      obj.parts[0].setPosition(px, py - s * 0.7);
-      obj.parts[1].setPosition(px, py + s * 0.35);
+      const iz = TILE_SIZE * 1.5;
+      obj.parts[0].setPosition(px, py - iz * 0.42);
+      obj.parts[1].setPosition(px, py + iz * 0.14);
     }
   }
 
@@ -586,6 +637,7 @@ export default class GameScene extends Phaser.Scene {
       const wasIn = this.inRange.has('overpass');
       if (nowIn && !wasIn) {
         this.inRange.add('overpass');
+        this.pressOverpassButton(); // both cars physically push it in
         if (this.isICap) {
           if (!this.overpassActive) {
             this.activateOverpass();
@@ -653,14 +705,41 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
-  // iCapCar only: the overpass materialises — the concrete road the player drew
-  // appears (walkable, boosts) with its bridge borders. Rusty car never gets here.
+  // The overpass button, pressed "in" once and left down (both cars push it) —
+  // just swap to the pressed-in texture (setTexture resets scale, so restore it).
+  pressOverpassButton() {
+    const obj = this.poiObjects.overpass;
+    if (!obj || obj.pressed) return;
+    obj.pressed = true;
+    obj.marker.setTexture('overpass-btn-down').setDisplaySize(TILE_SIZE * 1.6, TILE_SIZE * 1.6);
+  }
+
+  // iCapCar only: the overpass materialises. The concrete road the player drew
+  // unfurls row by row from the near (bottom) end up, its kerbs appearing with
+  // each row — so it reads as the platform building the road ahead of the car.
+  // (walkable/boost apply immediately via overpassActive; only the visuals sweep.)
   activateOverpass() {
     if (this.overpassActive) return;
     this.overpassActive = true;
-    this.restampOverpass();
-    this.overpassCurbs.forEach((c) => c.setVisible(true)); // kerbs appear with the road
     this.overpassUnderRounding.forEach((w) => w.setVisible(false)); // underneath rounding paved over
+
+    const rows = {};
+    for (let y = 0; y < MAP_H; y += 1) {
+      for (let x = 0; x < MAP_W; x += 1) {
+        if (this.overpass[y][x]) (rows[y] = rows[y] || []).push(x);
+      }
+    }
+    const rowYs = Object.keys(rows)
+      .map(Number)
+      .sort((a, b) => b - a); // bottom (nearest the car) first
+    const STEP = 45;
+    rowYs.forEach((ry, i) => {
+      this.time.delayedCall(i * STEP, () => rows[ry].forEach((x) => this.stampCell(x, ry)));
+    });
+    this.overpassCurbs.forEach((curb) => {
+      const i = rowYs.indexOf(Math.floor(curb.y / TILE_SIZE));
+      this.time.delayedCall(Math.max(0, i) * STEP + 20, () => curb.setVisible(true));
+    });
   }
 
   // Finish line. The clock (running since the Architect stage) stops here; then
@@ -706,12 +785,42 @@ export default class GameScene extends Phaser.Scene {
       w = TILE_SIZE * 0.6;
       h = (u + dn + 1) * TILE_SIZE;
     }
-    const barrier = this.add
-      .tileSprite(cxWorld, cyWorld, w, h, KYC_STRIPE_KEY)
-      .setDepth(4);
-    this.physics.add.existing(barrier, true);
-    const collider = this.physics.add.collider(this.driver, barrier);
-    this.gateBarriers[poi.type] = { barrier, collider };
+    // Collision is a single invisible static body across the corridor.
+    const body = this.add.rectangle(cxWorld, cyWorld, w, h, 0x000000, 0).setDepth(4);
+    this.physics.add.existing(body, true);
+    const collider = this.physics.add.collider(this.driver, body);
+
+    // The visible gate: two candy-stripe panels meeting in the middle, between
+    // posts. openGate() slides the panels apart into the posts.
+    const postW = TILE_SIZE * 0.3;
+    let panels;
+    let posts;
+    if (vertical) {
+      const pw = w / 2;
+      panels = [
+        this.add.tileSprite(cxWorld - pw / 2, cyWorld, pw, h, KYC_STRIPE_KEY).setDepth(4),
+        this.add.tileSprite(cxWorld + pw / 2, cyWorld, pw, h, KYC_STRIPE_KEY).setDepth(4),
+      ];
+      posts = [
+        this.gatePost(cxWorld - w / 2, cyWorld, postW, h + TILE_SIZE * 0.5),
+        this.gatePost(cxWorld + w / 2, cyWorld, postW, h + TILE_SIZE * 0.5),
+      ];
+    } else {
+      const ph = h / 2;
+      panels = [
+        this.add.tileSprite(cxWorld, cyWorld - ph / 2, w, ph, KYC_STRIPE_KEY).setDepth(4),
+        this.add.tileSprite(cxWorld, cyWorld + ph / 2, w, ph, KYC_STRIPE_KEY).setDepth(4),
+      ];
+      posts = [
+        this.gatePost(cxWorld, cyWorld - h / 2, w + TILE_SIZE * 0.5, postW),
+        this.gatePost(cxWorld, cyWorld + h / 2, w + TILE_SIZE * 0.5, postW),
+      ];
+    }
+    this.gateBarriers[poi.type] = { body, collider, panels, posts, vertical, span: vertical ? w : h };
+  }
+
+  gatePost(x, y, w, h) {
+    return this.add.rectangle(x, y, w, h, 0x2b3245).setStrokeStyle(2, 0x11151f).setDepth(5);
   }
 
   openGate(type) {
@@ -719,7 +828,22 @@ export default class GameScene extends Phaser.Scene {
     const g = this.gateBarriers[type];
     if (g) {
       this.physics.world.removeCollider(g.collider);
-      g.barrier.destroy();
+      g.body.destroy();
+      // Slide the two panels apart into the posts, then remove them.
+      const d = g.span / 2;
+      g.panels.forEach((panel, i) => {
+        const move = g.vertical
+          ? { x: panel.x + (i === 0 ? -d : d) }
+          : { y: panel.y + (i === 0 ? -d : d) };
+        this.tweens.add({
+          targets: panel,
+          ...move,
+          alpha: 0.2,
+          duration: 480,
+          ease: 'Cubic.easeInOut',
+          onComplete: () => panel.destroy(),
+        });
+      });
       delete this.gateBarriers[type];
     }
     const obj = this.poiObjects[type];
@@ -730,38 +854,33 @@ export default class GameScene extends Phaser.Scene {
   // when the iCapCar is auto-cleared through KYC without stopping.
   showGateBubble(poi, text) {
     const { px, py } = this.tileToWorld(poi.x, poi.y);
-    const by = py - TILE_SIZE * 1.15;
-    const bubble = this.add
-      .text(px, by, text, {
-        fontFamily: 'sans-serif',
-        fontSize: '12px',
-        color: '#0b1020',
-        backgroundColor: '#eaf3ff',
-        padding: { x: 8, y: 5 },
-      })
+    const by = py - TILE_SIZE * 1.2;
+    const label = this.add
+      .text(px, by, text, { fontFamily: FONT_BODY, fontSize: '12px', color: '#242424' })
       .setOrigin(0.5)
       .setResolution(RENDER_SCALE)
-      .setDepth(30);
-    const tail = this.add
-      .triangle(px, by + bubble.height / 2 - 1, -5, 0, 5, 0, 0, 8, 0xeaf3ff)
-      .setDepth(30);
+      .setDepth(31);
+    const w = label.width + 16;
+    const h = label.height + 10;
+    // A light-grey chip with a dark-grey border + a light top-left bevel.
+    const border = this.add.rectangle(px, by, w + 4, h + 4, 0x373737).setDepth(29);
+    const face = this.add.rectangle(px, by, w, h, 0xc6c6c6).setDepth(30);
+    const hi = this.add.rectangle(px, by - h / 2 + 1.5, w, 3, 0xefefef).setDepth(30);
+    const group = [border, face, hi, label];
     this.tweens.add({
-      targets: [bubble, tail],
-      y: '-=10',
+      targets: group,
+      y: '-=12',
       alpha: 0,
       delay: 1200,
       duration: 700,
-      onComplete: () => {
-        bubble.destroy();
-        tail.destroy();
-      },
+      onComplete: () => group.forEach((o) => o.destroy()),
     });
   }
 
   finishTask(poi) {
     this.collected.add(poi.type);
     this.inventory.push(poi.type);
-    this.scene.get('UI').setInventory(this.inventory.length);
+    this.scene.get('UI').addAsset(poi.type);
     const obj = this.poiObjects[poi.type];
     if (obj) {
       obj.marker.setAlpha(0.35); // spent — visibly collected

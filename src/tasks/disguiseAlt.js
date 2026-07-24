@@ -12,7 +12,7 @@
 // stage. GameScene also fades the disguise off the map marker on collect.
 // ---------------------------------------------------------------------------
 
-const PULL_OFF_DIST = 110; // px a piece must be dragged before it comes free
+const PULL_OFF_DIST = 130; // px a piece must be dragged before it comes free
 
 export function runDisguiseAltTask(scene, ui, opts, onComplete) {
   const kb = scene.input.keyboard;
@@ -56,11 +56,13 @@ export function runDisguiseAltTask(scene, ui, opts, onComplete) {
   }
 
   function build() {
-    const asset = ui.add.circle(cx, cy, 50, 0xf0932b).setStrokeStyle(3, 0x1a1a1a);
+    // The disguised asset is its real icon (Private Credit) wearing the hat +
+    // moustache you drag off.
+    const asset = ui.add.image(cx, cy, 'icon-pc').setDisplaySize(120, 120);
     els.push(asset);
     if (!opts.isICap) {
-      const hat = ui.add.rectangle(cx, cy - 40, 78, 34, 0x2b3346).setStrokeStyle(2, 0x11151f);
-      const moustache = ui.add.rectangle(cx, cy + 16, 64, 16, 0x2b2320).setStrokeStyle(2, 0x11151f);
+      const hat = ui.add.image(cx, cy - 54, 'icon-hat').setDisplaySize(108, 72);
+      const moustache = ui.add.image(cx, cy + 24, 'icon-mustache').setDisplaySize(92, 50);
       makeDraggable(hat);
       makeDraggable(moustache);
     }

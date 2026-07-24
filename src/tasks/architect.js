@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { FONT_TITLE, FONT_BODY } from '../config.js';
 
 // ---------------------------------------------------------------------------
 // Architect the allocation — runs at the START of a run (after car select,
@@ -45,7 +46,7 @@ export function runArchitect(scene, ui, opts, onComplete) {
   const label = (x, y, str, size, color, extra = {}) =>
     keep(
       ui.add
-        .text(x, y, str, { fontFamily: 'sans-serif', fontSize: `${size}px`, color, ...extra })
+        .text(x, y, str, { fontFamily: FONT_BODY, fontSize: `${size}px`, color, ...extra })
         .setOrigin(0.5)
         .setResolution(2)
         .setDepth(62),
@@ -85,7 +86,7 @@ export function runArchitect(scene, ui, opts, onComplete) {
   drawPie();
 
   // Title + hole label.
-  label(cx, H * 0.13, 'Architect the allocation', 30, '#8fd0ff');
+  label(cx, H * 0.13, 'Architect the allocation', 30, '#8fd0ff', { fontFamily: FONT_TITLE });
   label(cx, H * 0.19, `Complete ${client}'s portfolio — add the 3 alternatives.`, 18, '#eef3ff');
   label(cx, cy, client, 17, '#cfe0ff', { wordWrap: { width: r * 1.6 }, align: 'center' });
 
@@ -96,13 +97,18 @@ export function runArchitect(scene, ui, opts, onComplete) {
     });
   }
 
-  // Empty alt slots: a ring + short tag sitting in the slice.
+  // Empty alt slots: a ring with the alternative's icon, ghosted until filled.
   for (const s of segs) {
     if (!s.alt) continue;
-    s.ring = keep(
-      ui.add.circle(s.sx, s.sy, 22).setStrokeStyle(2, 0xffffff, 0.55).setDepth(62),
+    s.ring = keep(ui.add.circle(s.sx, s.sy, 24).setStrokeStyle(2, 0xffffff, 0.5).setDepth(62));
+    s.iconImg = keep(
+      ui.add
+        .image(s.sx, s.sy, `icon-${s.key}`)
+        .setDisplaySize(30, 30)
+        .setTintFill(0xaab6d0)
+        .setAlpha(0.55)
+        .setDepth(63),
     );
-    s.tag = label(s.sx, s.sy, s.short, 13, '#c8d6f0');
   }
 
   const prompt = label(cx, H * 0.9, '', 16, '#9fe0b0');
@@ -114,7 +120,15 @@ export function runArchitect(scene, ui, opts, onComplete) {
     drawPie();
     s.text.setColor('#eef3ff');
     if (s.ring) s.ring.destroy();
-    if (s.tag) s.tag.destroy();
+    if (s.iconImg) {
+      s.iconImg.clearTint().setAlpha(1); // grey ghost -> real coloured icon
+      scene.tweens.add({
+        targets: s.iconImg,
+        scale: { from: s.iconImg.scale * 1.35, to: s.iconImg.scale },
+        duration: 240,
+        ease: 'Back.out',
+      });
+    }
     if (segs.every((x) => x.filled) && !complete) {
       complete = true;
       prompt.setText('Allocation complete — press Enter to drive').setColor('#9fe0b0');
@@ -175,17 +189,14 @@ export function runArchitect(scene, ui, opts, onComplete) {
     tray.forEach((s, i) => {
       const tx = cx + (i - (tray.length - 1) / 2) * 190;
       const ty = H * 0.82;
-      const token = ui.add.container(tx, ty).setDepth(63).setSize(64, 64);
-      const body = ui.add.circle(0, 0, 30, s.color).setStrokeStyle(3, 0x0b1020);
-      const tl = ui.add
-        .text(0, 0, s.short, { fontFamily: 'sans-serif', fontSize: '16px', color: '#0b1020' })
-        .setOrigin(0.5)
-        .setResolution(2);
+      const token = ui.add.container(tx, ty).setDepth(63).setSize(68, 68);
+      const body = ui.add.circle(0, 0, 32, 0x141c30).setStrokeStyle(3, s.color);
+      const ic = ui.add.image(0, 0, `icon-${s.key}`).setDisplaySize(40, 40);
       const cap = ui.add
-        .text(0, 44, s.label, { fontFamily: 'sans-serif', fontSize: '12px', color: '#9fb0d0' })
+        .text(0, 46, s.label, { fontFamily: FONT_BODY, fontSize: '12px', color: '#9fb0d0' })
         .setOrigin(0.5)
         .setResolution(2);
-      token.add([body, tl, cap]);
+      token.add([body, ic, cap]);
       token.setData('key', s.key);
       token.setData('home', { x: tx, y: ty });
       token.setInteractive();
