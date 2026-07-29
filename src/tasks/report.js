@@ -82,7 +82,7 @@ export function runReport(scene, ui, opts, onFinish) {
     txt(
       W / 2,
       H * 0.3,
-      'Statements from every custodian and fund — you reconcile them yourself.',
+      'Statements from every custodian and fund. You reconcile them yourself.',
       20,
       '#ffcbb5',
       { fontStyle: 'bold' },
@@ -155,10 +155,10 @@ export function runReport(scene, ui, opts, onFinish) {
     });
   } else {
     const cards = [
-      { t: 'Custodian A — Public equities', ang: -5, dx: -110, dy: -92 },
-      { t: 'Bank — Fixed income', ang: 4, dx: 66, dy: -52 },
-      { t: 'Fund admin — Private Equity (PDF)', ang: -3, dx: -72, dy: 58 },
-      { t: 'Alt statement — PENDING', ang: 6, dx: 92, dy: 98 },
+      { t: 'Custodian A: Public equities', ang: -5, dx: -110, dy: -92 },
+      { t: 'Bank: Fixed income', ang: 4, dx: 66, dy: -52 },
+      { t: 'Fund admin: Private Equity (PDF)', ang: -3, dx: -72, dy: 58 },
+      { t: 'Alt statement: PENDING', ang: 6, dx: 92, dy: 98 },
     ];
     for (const c of cards) {
       keep(

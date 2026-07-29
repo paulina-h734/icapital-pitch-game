@@ -81,7 +81,7 @@ export function runCagedAltTask(scene, ui, opts, onComplete) {
     ui.showPrompt({
       body: `${clues[idx].text} = ?`,
       hint: warn
-        ? "That doesn't reconcile — check it and try again"
+        ? "That doesn't reconcile, check it and try again"
         : `Clue ${idx + 1} of 3 · type your answer, then press Enter`,
       warn: !!warn,
     });

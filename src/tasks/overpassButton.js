@@ -25,13 +25,13 @@ export function runOverpassButton(scene, ui, opts, onComplete) {
   if (opts.isICap) {
     ui.showPrompt({
       title: 'Overpass · iCapCar recognised',
-      body: 'Materialising the document overpass — a concrete road straight over the subscription forest. Follow it through.',
+      body: 'Materialising the document overpass. A concrete road straight over the subscription forest. Follow it through.',
       hint: 'Press Enter',
     });
   } else {
     ui.showPrompt({
       title: 'Activate overpass',
-      body: "You press the button. Nothing happens — the overpass stays a rumour. Maybe it's broken. Looks like it's the document forest the hard way.",
+      body: "You press the button. Nothing happens. The overpass stays a rumour. Maybe it's broken. Looks like it's the document forest the hard way.",
       hint: 'Press Enter',
     });
   }

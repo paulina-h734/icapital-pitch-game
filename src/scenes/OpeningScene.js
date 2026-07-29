@@ -354,7 +354,7 @@ export default class OpeningScene extends Phaser.Scene {
       stroke: '#173453',
       strokeThickness: 8,
     });
-    this.carCard(this.W / 2 - 195, 'car-old', 'Rusty car', false);
+    this.carCard(this.W / 2 - 195, 'car-old', 'Traditional car', false);
     this.carCard(this.W / 2 + 195, 'car-icap', 'iCapCar', true);
   }
 
@@ -385,7 +385,7 @@ export default class OpeningScene extends Phaser.Scene {
   showUnlock() {
     this.clearScreen();
     this.state = 'unlock';
-    this.label(this.W / 2, this.H * 0.4, 'Now Driving the Rusty Car', 54, '#ffd0ba', {
+    this.label(this.W / 2, this.H * 0.4, 'Now Driving the Traditional Car', 54, '#ffd0ba', {
       fontFamily: FONT_TITLE,
       stroke: '#173453',
       strokeThickness: 9,
@@ -445,7 +445,7 @@ export default class OpeningScene extends Phaser.Scene {
     this.leftText(
       left,
       top + 116,
-      "The iCapital platform maps the whole journey — here's the road ahead:",
+      "The iCapital platform maps the whole journey. Here's the road ahead:",
       19,
       '#5a6478',
       FONT_BODY,
@@ -496,7 +496,7 @@ export default class OpeningScene extends Phaser.Scene {
       stroke: '#173453',
       strokeThickness: 5,
     });
-    this.resultRow(W / 2, H * 0.4, 'Rusty car', best.old, data.isICap === false);
+    this.resultRow(W / 2, H * 0.4, 'Traditional car', best.old, data.isICap === false);
     this.resultRow(W / 2, H * 0.53, 'iCapCar', best.icap, data.isICap === true);
     // Return home = full reset (clears best times); Run again = keep names, re-pick car.
     this.bigButton(W / 2 - 175, H * 0.75, 'Return home', () => this.goHome());
@@ -559,7 +559,7 @@ export default class OpeningScene extends Phaser.Scene {
       return;
     }
     if (this.state === 'unlock') {
-      if (e.key === 'Enter') this.begin(); // rusty car only now — straight to driving
+      if (e.key === 'Enter') this.begin(); // traditional car only now, straight to driving
       return;
     }
     if (this.state === 'briefIntro') {

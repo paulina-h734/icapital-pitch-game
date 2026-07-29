@@ -86,7 +86,7 @@ export function runDisguiseAltTask(scene, ui, opts, onComplete) {
   build();
   if (opts.isICap) {
     ui.showPrompt({
-      body: "iCapCar's scanner inspected the asset automatically — the disguise hid nothing.",
+      body: "iCapCar's scanner inspected the asset automatically. The disguise hid nothing.",
       hint: 'Press E to collect private credit',
     });
   } else {

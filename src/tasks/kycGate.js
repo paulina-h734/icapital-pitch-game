@@ -27,9 +27,9 @@ export function runKycGate(scene, ui, opts, onComplete) {
   function askName(warn) {
     state = 'name';
     ui.showPrompt({
-      body: "Identity check — verify your client's name.",
+      body: "Identity check. Verify your client's name.",
       input,
-      hint: warn ? "That doesn't match — try again" : 'Type the name, then press Enter',
+      hint: warn ? "That doesn't match, try again" : 'Type the name, then press Enter',
       warn: !!warn,
     });
   }
@@ -38,9 +38,9 @@ export function runKycGate(scene, ui, opts, onComplete) {
     state = 'food';
     input = '';
     ui.showPrompt({
-      body: "Second factor — verify your client's favourite food.",
+      body: "Second factor. Verify your client's favourite food.",
       input,
-      hint: warn ? "That doesn't match — try again" : 'Type the answer, then press Enter',
+      hint: warn ? "That doesn't match, try again" : 'Type the answer, then press Enter',
       warn: !!warn,
     });
   }
@@ -48,7 +48,7 @@ export function runKycGate(scene, ui, opts, onComplete) {
   function success() {
     state = 'success';
     ui.showPrompt({
-      body: `Welcome, ${opts.clientName}. Identity Solutions confirmed your client — the gate is open.`,
+      body: `Welcome, ${opts.clientName}. Identity Solutions confirmed your client. The gate is open.`,
       hint: 'Press Enter to proceed',
     });
   }
@@ -86,13 +86,13 @@ export function runKycGate(scene, ui, opts, onComplete) {
   if (!opts.allCollected) {
     state = 'blocked';
     ui.showPrompt({
-      body: `Customs can't clear this client yet — you've verified ${opts.collectedCount} of 3 alternatives. Finish your diligence, then come back.`,
+      body: `Customs can't clear this client yet. You've verified ${opts.collectedCount} of 3 alternatives. Finish your diligence, then come back.`,
       hint: 'Press Enter to turn back',
     });
   } else if (opts.isICap) {
     state = 'icap';
     ui.showPrompt({
-      body: `Identity Solutions verified ${opts.clientName} automatically. Welcome — have a nice day, ${opts.clientName}.`,
+      body: `Identity Solutions verified ${opts.clientName} automatically. Welcome, have a nice day, ${opts.clientName}.`,
       hint: 'Press Enter to continue',
     });
   } else {

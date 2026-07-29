@@ -45,7 +45,7 @@ export function resetBestTimes() {
 
 // ms -> "M:SS.d"
 export function formatTime(ms) {
-  if (ms == null) return '—';
+  if (ms == null) return '--';
   const cs = Math.floor(ms / 100); // tenths of a second
   const tenths = cs % 10;
   const secs = Math.floor(cs / 10) % 60;
