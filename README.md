@@ -1,10 +1,10 @@
 # Drive the Journey
 
-A short, playable top‑down driving game — the centerpiece of a 15‑minute pitch
+A short, playable top‑down driving game and the primary mechanism for a 15‑minute pitch
 for iCapital. The player drives the **same course** in two cars: a **rusty car**
-(going it alone — every task is manual and slow) and the **iCapCar** (the
-iCapital platform — tasks auto‑complete and the route glides). A persistent timer
-makes the contrast undeniable. Built with **Phaser 3 + Vite**; runs fully offline.
+(every task is manual and slow) and the **iCapCar** (the iCapital platform, tasks auto‑complete, 
+and the route glides). A persistent timer makes the contrast undeniable. Built with 
+**Phaser 3 + Vite**; runs fully offline.
 
 ## Run it
 
